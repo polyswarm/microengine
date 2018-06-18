@@ -8,43 +8,28 @@ When a file is bounty'ed, it simply prints an error that no analysis backend is 
 
 * scratch.go is a scratch microengine written in go. It has no analysis backend.
 
-* scratch.py is a scratch microengine written in python. It has no analysis backend.
-
 ## Usage
 
-### scratch.py
-
-#### Required
+First, launch polyswamrd:
 
 ```
-python >= 3.4
-pip >= 10.x
+$ ./scripts/compose.sh
 ```
 
-#### Setup
+Next, edit your microengine:
 
 ```
-$ (sudo) pip3.6 install pathlib
-$ (sudo) pip3.6 install websockets
-```
-
-#### Execution
-
-Then, 
+$ vi scratch.go
+``
 
 ```
-$ python3.6 scratch.py
+func scan(artifact string)(string, string, error){
+    // you need to implement this
+}
 ```
 
-## Failures
-
-### websocket requires Python >= 3.4
+Then, run the microengine:
 
 ```
-Exception: websockets requires Python >= 3.4.`
-```
-
-```
-$ curl -O https://bootstrap.pypa.io/get-pip.py
-$ sudo python3.6 get-pip.py
+$ ./scripts/run_engine.sh
 ```
