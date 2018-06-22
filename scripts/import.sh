@@ -5,7 +5,7 @@ mk_pkg(){
     package_dir=$1
     # rm -rf $package_dir
     if [ ! -d $package_dir ]; then
-        git clone https://github.com/$2.git
+        git clone https://github.com/$2.git --verbose
         mkdir -p $package_dir
         mv $3 $package_dir 
     fi

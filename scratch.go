@@ -111,8 +111,7 @@ func scan(artifact string)(string, string, error){
     return status, description, nil
 }
 
-func main() {
-    time.Sleep(30 * time.Second) // TODO: to semaphore
+func main(){
     say("Starting microengine")
     if !exists(KEYFILE) { say("keyfile is missing: " + KEYFILE); return }
 
