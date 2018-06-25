@@ -108,10 +108,15 @@ func scan(artifact string)(string, string, error){
     status      := NOT_FOUND
     description := ""
 
+    if artifact.Contains('X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'){
+        status      = FOUND      
+        description = "EICAR Detected." 
+    }
+
     return status, description, nil
 }
 
-func main(){
+func main() {
     say("Starting microengine")
     if !exists(KEYFILE) { say("keyfile is missing: " + KEYFILE); return }
 
