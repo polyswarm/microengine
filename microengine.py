@@ -1,40 +1,56 @@
 import aiohttp
 import asyncio
 import json
-import os
-import sys
 import websockets
 
 from queue import PriorityQueue
 from web3.auto import w3 as web3
 
-
-# USER CODE: Replace this functionality with your scanning logic
-async def scan(content):
-    """Scan a stream representing a bounty artifact"""
-    return True, True
-
-
-def unlock_key(keyfile, password):
-    """Open an encrypted keystore file and decrypt it"""
-    with open(keyfile, 'r') as f:
-        priv_key = web3.eth.account.decrypt(f.read(), password)
-
-    address = web3.eth.account.privateKeyToAccount(priv_key).address
-    return (address, priv_key)
-
-
-KEYFILE = 'keyfile'
-PASSWORD = 'password'
-ADDRESS, PRIV_KEY = unlock_key(KEYFILE, PASSWORD)
-POLYSWARMD_ADDR = os.environ.get('POLYSWARMD_ADDR', 'localhost:31337')
-
 # These values come from the BountyRegistry contract
-BID = '62500000000000000'
+MINIMUM_BID = '62500000000000000'
 ARBITER_VOTE_WINDOW = 25
 ASSERTION_REVEAL_WINDOW = 25
 
-schedule = PriorityQueue()
+
+class Microengine(object):
+    def __init__(self, polyswarmd_addr, keyfile, password):
+        """Initialize a microengine"""
+        self.polyswarmd_addr = polyswarmd_addr
+
+        with open(keyfile, 'r') as f:
+            self.priv_key = web3.eth.account.decrypt(f.read(), password)
+
+        self.address = web3.eth.account.privateKeyToAccount(
+            self.priv_key).address
+        self.schedule = PriorityQueue()
+
+    async def scan(self, content):
+        """Override this to implement custom scanning logic"""
+        print(content)
+
+        return True, True
+
+    def bid(self):
+        """Override this to implement custom bid calculation logic"""
+        return MINIMUM_BID
+
+    def schedule_peek(self):
+        """Check the next event without dequeing it"""
+        if self.schedule.queue:
+            return self.schedule.queue[0]
+        return None
+
+    def schedule_get(self):
+        """Dequeue and return the next event"""
+        return self.schedule.get()
+
+    def schedule_put(self, block_number, obj):
+        """Add an event to the schedule"""
+        self.schedule.put((block_number, obj))
+
+    def run(self):
+        """Run this microengine"""
+        asyncio.get_event_loop().run_until_complete(listen_for_events(self))
 
 
 class SecretAssertion(object):
@@ -59,39 +75,38 @@ class UnsettledBounty(object):
 
 def check_response(response):
     """Check the status of responses from polyswarmd"""
-    print(response)
     return response['status'] == 'OK'
 
 
-async def get_artifact(session, ipfs_hash, index):
+async def get_artifact(microengine, session, ipfs_hash, index):
     """Retrieve an artifact from IPFS via polyswarmd"""
-    uri = 'http://{0}/artifacts/{1}/{2}'.format(POLYSWARMD_ADDR, ipfs_hash,
-                                                index)
+    uri = 'http://{0}/artifacts/{1}/{2}'.format(microengine.polyswarmd_addr,
+                                                ipfs_hash, index)
     async with session.get(uri) as response:
         if response.status == 200:
-            return response.content
+            return await response.read()
 
         return None
 
 
-async def post_transactions(session, transactions):
+async def post_transactions(microengine, session, transactions):
     """Post a set of (signed) transactions to Ethereum via polyswarmd, parsing the emitted events"""
     signed = []
     for tx in transactions:
-        s = web3.eth.account.signTransaction(tx, PRIV_KEY)
+        s = web3.eth.account.signTransaction(tx, microengine.priv_key)
         raw = bytes(s['rawTransaction']).hex()
         signed.append(raw)
 
-    uri = 'http://{0}/transactions'.format(POLYSWARMD_ADDR)
+    uri = 'http://{0}/transactions'.format(microengine.polyswarmd_addr)
 
     async with session.post(uri, json={'transactions': signed}) as response:
         return await response.json()
 
 
-async def post_assertion(session, guid, bid, mask, verdicts):
+async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     """Post an assertion to polyswarmd"""
     uri = 'http://{0}/bounties/{1}/assertions?account={2}'.format(
-        POLYSWARMD_ADDR, guid, ADDRESS)
+        microengine.polyswarmd_addr, guid, microengine.address)
     assertion = {
         'bid': bid,
         'mask': mask,
@@ -105,7 +120,7 @@ async def post_assertion(session, guid, bid, mask, verdicts):
         return None, []
 
     nonce = response['result']['nonce']
-    response = await post_transactions(session,
+    response = await post_transactions(microengine, session,
                                        response['result']['transactions'])
 
     if not check_response(response):
@@ -118,10 +133,11 @@ async def post_assertion(session, guid, bid, mask, verdicts):
         return None, []
 
 
-async def post_reveal(session, guid, index, nonce, verdicts, metadata):
+async def post_reveal(microengine, session, guid, index, nonce, verdicts,
+                      metadata):
     """Post an assertion reveal to polyswarmd"""
     uri = 'http://{0}/bounties/{1}/assertions/{2}/reveal?account={3}'.format(
-        POLYSWARMD_ADDR, guid, index, ADDRESS)
+        microengine.polyswarmd_addr, guid, index, microengine.address)
     reveal = {
         'nonce': nonce,
         'verdicts': verdicts,
@@ -134,7 +150,7 @@ async def post_reveal(session, guid, index, nonce, verdicts, metadata):
     if not check_response(response):
         return None
 
-    response = await post_transactions(session,
+    response = await post_transactions(microengine, session,
                                        response['result']['transactions'])
 
     if not check_response(response):
@@ -147,10 +163,10 @@ async def post_reveal(session, guid, index, nonce, verdicts, metadata):
         return None
 
 
-async def settle_bounty(session, guid):
+async def settle_bounty(microengine, session, guid):
     """Settle a bounty via polyswarmd"""
     uri = 'http://{0}/bounties/{1}/settle?account={2}'.format(
-        POLYSWARMD_ADDR, guid, ADDRESS)
+        microengine.polyswarmd_addr, guid, microengine.address)
 
     async with session.post(uri) as response:
         response = await response.json()
@@ -158,7 +174,7 @@ async def settle_bounty(session, guid):
     if not check_response(response):
         return Nonce
 
-    response = await post_transactions(session,
+    response = await post_transactions(microengine, session,
                                        response['result']['transactions'])
 
     if not check_response(response):
@@ -171,67 +187,62 @@ async def settle_bounty(session, guid):
         return None
 
 
-async def handle_new_block(session, number):
+async def handle_new_block(microengine, session, number):
     """Perform scheduled events when a new block is reported"""
     ret = []
-    while schedule.queue and schedule.queue[0][0] < number:
-        exp, task = schedule.get()
+    while microengine.schedule_peek(
+    ) and microengine.schedule_peek()[0] < number:
+        exp, task = microengine.schedule_get()
         if isinstance(task, SecretAssertion):
             ret.append(await
-                       post_reveal(session, task.guid, task.index, task.nonce,
-                                   task.verdicts, task.metadata))
+                       post_reveal(microengine, session, task.guid, task.index,
+                                   task.nonce, task.verdicts, task.metadata))
         elif isinstance(task, UnsettledBounty):
-            ret.append(await settle_bounty(session, task.guid))
+            ret.append(await settle_bounty(microengine, session, task.guid))
 
     return ret
 
 
-async def handle_new_bounty(session, guid, author, uri, amount, expiration):
+async def handle_new_bounty(microengine, session, guid, author, uri, amount,
+                            expiration):
     """Scan and assert on a posted bounty"""
     mask = []
     verdicts = []
     for i in range(256):
-        content = await get_artifact(session, uri, i)
+        content = await get_artifact(microengine, session, uri, i)
         if not content:
             print('no more artifacts')
             break
 
         print('scanning artifact:', i)
-        bit, verdict = await scan(content)
+        bit, verdict = await microengine.scan(content)
         mask.append(bit)
         verdicts.append(verdict)
 
-    nonce, assertions = await post_assertion(session, guid, BID, mask,
-                                             verdicts)
+    nonce, assertions = await post_assertion(microengine, session, guid,
+                                             microengine.bid(), mask, verdicts)
     for a in assertions:
         sa = SecretAssertion(guid, a['index'], nonce, verdicts, '')
-        schedule.put((int(expiration) + ARBITER_VOTE_WINDOW, sa))
+        microengine.schedule_put(int(expiration) + ARBITER_VOTE_WINDOW, sa)
 
         ub = UnsettledBounty(guid)
-        schedule.put(
-            (int(expiration) + ARBITER_VOTE_WINDOW + ASSERTION_REVEAL_WINDOW,
-             ub))
+        microengine.schedule_put(
+            int(expiration) + ARBITER_VOTE_WINDOW + ASSERTION_REVEAL_WINDOW,
+            ub)
 
     return assertions
 
 
-async def listen_for_events():
+async def listen_for_events(microengine):
     """Listen for events via websocket connection to polyswarmd"""
-    uri = 'ws://{0}/events'.format(POLYSWARMD_ADDR)
+    uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
     async with aiohttp.ClientSession() as session:
         async with websockets.connect(uri) as ws:
             while True:
                 event = json.loads(await ws.recv())
                 if event['event'] == 'block':
-                    print(await handle_new_block(session,
+                    print(await handle_new_block(microengine, session,
                                                  event['data']['number']))
                 elif event['event'] == 'bounty':
-                    print(await handle_new_bounty(session, **event['data']))
-
-
-def main(argv):
-    asyncio.get_event_loop().run_until_complete(listen_for_events())
-
-
-if __name__ == '__main__':
-    main(sys.argv)
+                    print(await handle_new_bounty(microengine, session,
+                                                  **event['data']))
