@@ -1,8 +1,12 @@
-FROM golang:1.10-alpine as builder
+FROM python:3
 LABEL maintainer="PolySwarm Developers <info@polyswarm.io>"
 
-RUN apk add --no-cache alpine-sdk git bash
-COPY . .
+WORKDIR /usr/src/app
 
-# RUN env GIT_TERMINAL_PROMPT=1 go get github.com/ethereum/go-etheruem
-RUN ./scripts/import.sh
+COPY requirements.txt ./
+RUN set -x && pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+RUN set -x && pip install .
+
+CMD ["microengine"]

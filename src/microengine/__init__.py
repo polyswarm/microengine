@@ -13,6 +13,8 @@ ASSERTION_REVEAL_WINDOW = 25
 
 
 class Microengine(object):
+    """Base class for microengines, override scan() and/or bid() to customize behavior"""
+
     def __init__(self, polyswarmd_addr, keyfile, password):
         """Initialize a microengine"""
         self.polyswarmd_addr = polyswarmd_addr
@@ -22,15 +24,13 @@ class Microengine(object):
 
         self.address = web3.eth.account.privateKeyToAccount(
             self.priv_key).address
-        self.schedule = PriorityQueue()
+        self.schedule = PriorityQueue() 
 
-    async def scan(self, content):
+    async def scan(self, guid, content):
         """Override this to implement custom scanning logic"""
-        print(content)
+        return True, True, ''
 
-        return True, True
-
-    def bid(self):
+    def bid(self, guid):
         """Override this to implement custom bid calculation logic"""
         return MINIMUM_BID
 
@@ -208,6 +208,7 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     """Scan and assert on a posted bounty"""
     mask = []
     verdicts = []
+    metadatas = []
     for i in range(256):
         content = await get_artifact(microengine, session, uri, i)
         if not content:
@@ -215,14 +216,15 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
             break
 
         print('scanning artifact:', i)
-        bit, verdict = await microengine.scan(content)
+        bit, verdict, metadata = await microengine.scan(guid, content)
         mask.append(bit)
         verdicts.append(verdict)
+        metadatas.append(metadata)
 
     nonce, assertions = await post_assertion(microengine, session, guid,
-                                             microengine.bid(), mask, verdicts)
+                                             microengine.bid(guid), mask, verdicts)
     for a in assertions:
-        sa = SecretAssertion(guid, a['index'], nonce, verdicts, '')
+        sa = SecretAssertion(guid, a['index'], nonce, verdicts, ';'.join(metadatas))
         microengine.schedule_put(int(expiration) + ARBITER_VOTE_WINDOW, sa)
 
         ub = UnsettledBounty(guid)
@@ -241,8 +243,17 @@ async def listen_for_events(microengine):
             while True:
                 event = json.loads(await ws.recv())
                 if event['event'] == 'block':
-                    print(await handle_new_block(microengine, session,
-                                                 event['data']['number']))
+                    number = event['data']['number']
+                    if number % 100 == 0:
+                        print('Block', number)
+
+                    block_results = await handle_new_block(microengine, session, number)
+                    if block_results:
+                        print(block_results)
                 elif event['event'] == 'bounty':
-                    print(await handle_new_bounty(microengine, session,
-                                                  **event['data']))
+                    bounty = event['data']
+                    print('received bounty:', bounty)
+
+                    assertions = await handle_new_bounty(
+                        microengine, session, **bounty)
+                    print('created assertions:', assertions)
