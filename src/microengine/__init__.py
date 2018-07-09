@@ -1,5 +1,6 @@
 import aiohttp
 import asyncio
+import functools
 import json
 import sys
 import websockets
@@ -25,6 +26,7 @@ class Microengine(object):
 
         self.address = web3.eth.account.privateKeyToAccount(
             self.priv_key).address
+        print('Using account:', self.address)
         self.schedule = PriorityQueue() 
 
     async def scan(self, guid, content):
@@ -57,6 +59,7 @@ class Microengine(object):
         asyncio.get_event_loop().run_until_complete(listen_for_events(self, testing))
 
 
+@functools.total_ordering
 class SecretAssertion(object):
     """An assertion which has yet to be publically revealed"""
 
@@ -68,13 +71,26 @@ class SecretAssertion(object):
         self.verdicts = verdicts
         self.metadata = metadata
 
+    def __eq__(self, other):
+        return self.guid == other.guid
 
+    def __lt__(self, other):
+        return self.guid < other.guid
+
+
+@functools.total_ordering
 class UnsettledBounty(object):
     """A bounty which has yet to be settled"""
 
     def __init__(self, guid):
         """Initialize an unsettled bounty"""
         self.guid = guid
+
+    def __eq__(self, other):
+        return self.guid == other.guid
+
+    def __lt__(self, other):
+        return self.guid < other.guid
 
 
 def check_response(response):
