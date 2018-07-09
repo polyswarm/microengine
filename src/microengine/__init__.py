@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import json
+import sys
 import websockets
 
 from queue import PriorityQueue
@@ -34,6 +35,9 @@ class Microengine(object):
         """Override this to implement custom bid calculation logic"""
         return MINIMUM_BID
 
+    def schedule_empty(self):
+        return self.schedule.empty()
+
     def schedule_peek(self):
         """Check the next event without dequeing it"""
         if self.schedule.queue:
@@ -48,9 +52,9 @@ class Microengine(object):
         """Add an event to the schedule"""
         self.schedule.put((block_number, obj))
 
-    def run(self):
+    def run(self, testing=-1):
         """Run this microengine"""
-        asyncio.get_event_loop().run_until_complete(listen_for_events(self))
+        asyncio.get_event_loop().run_until_complete(listen_for_events(self, testing))
 
 
 class SecretAssertion(object):
@@ -235,12 +239,12 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     return assertions
 
 
-async def listen_for_events(microengine):
+async def listen_for_events(microengine, testing=-1):
     """Listen for events via websocket connection to polyswarmd"""
     uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
     async with aiohttp.ClientSession() as session:
         async with websockets.connect(uri) as ws:
-            while True:
+            while testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
                 if event['event'] == 'block':
                     number = event['data']['number']
@@ -251,9 +255,21 @@ async def listen_for_events(microengine):
                     if block_results:
                         print(block_results)
                 elif event['event'] == 'bounty':
+                    if testing == 0:
+                        print('bounty received but 0 bounties remaining in test mode, ignoring')
+                        continue
+                    elif testing > 0:
+                        testing = testing - 1
+                        print(testing, 'bounties remaining in test mode')
+
                     bounty = event['data']
                     print('received bounty:', bounty)
 
                     assertions = await handle_new_bounty(
                         microengine, session, **bounty)
                     print('created assertions:', assertions)
+
+            if testing == 0:
+                print('exiting test mode')
+                # This is delayed by a few seconds, presumably for event loop cleanup
+                sys.exit(0)

@@ -13,13 +13,15 @@ from microengine.clamav import ClamavMicroengine
         help='Password to decrypt the keyfile with')
 @click.option('--backend', envvar='MICROENGINE_BACKEND', type=click.Choice(['scratch', 'eicar', 'clamav']), default='scratch',
         help='Backend to use')
-def main(polyswarmd_addr, keyfile, password, backend):
+@click.option('--testing', default=-1,
+        help='Activate testing mode for integration testing, respond to N bounties then exit')
+def main(polyswarmd_addr, keyfile, password, backend, testing):
     if backend == 'scratch':
-        ScratchMicroengine(polyswarmd_addr, keyfile, password).run()
+        ScratchMicroengine(polyswarmd_addr, keyfile, password).run(testing)
     elif backend == 'eicar':
-        EicarMicroengine(polyswarmd_addr, keyfile, password).run()
+        EicarMicroengine(polyswarmd_addr, keyfile, password).run(testing)
     elif backend == 'clamav':
-        ClamavMicroengine(polyswarmd_addr, keyfile, password).run()
+        ClamavMicroengine(polyswarmd_addr, keyfile, password).run(testing)
 
 
 if __name__ == '__main__':
