@@ -20,7 +20,8 @@ setup(
     package_dir={
         'microengine': 'src/microengine',
     },
+    data_files=[('test_data',['src/microengine/test_data/keyfile'])],
     entry_points={
-        'console_scripts': ['microengine=microengine.__main__:main'],
+        'console_scripts': ['microengine=microengine.__main__:main', 'microengine-unit-test=microengine.testbase:main'],
     },
 )

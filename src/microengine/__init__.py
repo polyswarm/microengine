@@ -30,7 +30,11 @@ class Microengine(object):
         self.schedule = PriorityQueue() 
 
     async def scan(self, guid, content):
-        """Override this to implement custom scanning logic"""
+        """Override this to implement custom scanning logic
+
+
+        :returns: bit, verdict, metadata
+        """
         return True, True, ''
 
     def bid(self, guid):
