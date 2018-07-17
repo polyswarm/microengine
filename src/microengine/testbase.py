@@ -10,7 +10,6 @@ from microengine.backend import choose_backend
 
 
 class CommonMicroEngineTests:
-
     malware_repo_client_cls = DummyMalwareRepoClient
     test_polyswarm_d_port = "localhost:31337"
 
@@ -29,10 +28,7 @@ class CommonMicroEngineTests:
             event_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(event_loop)
 
-
             async def run_t():
-
-
                 guid = str(uuid.uuid4())
                 cor = me.scan(guid, mal_content)
 
@@ -43,11 +39,18 @@ class CommonMicroEngineTests:
             event_loop.run_until_complete(coro())
             event_loop.close()
 
+
 @click.command()
-@click.option('--malware_repo', envvar='POLYSWARM_MALWARE_REPO_URL', default='dummy',
-        help='Backend to use')
-@click.option('--backend', envvar='MICROENGINE_BACKEND', default='scratch',
-        help='Backend to use')
+@click.option(
+    '--malware_repo',
+    envvar='POLYSWARM_MALWARE_REPO_URL',
+    default='dummy',
+    help='Backend to use')
+@click.option(
+    '--backend',
+    envvar='MICROENGINE_BACKEND',
+    default='scratch',
+    help='Backend to use')
 def main(malware_repo, backend):
     micro_engine_class = choose_backend(backend)
 
