@@ -5,7 +5,7 @@ import click
 
 from microengine.util import get_test_key_and_pw
 import asyncio
-from malware_repo_client.client import PolySwarmMalwareRepoClient, DummyMalwareRepoClient
+from malwarerepoclient.client import PolySwarmMalwareRepoClient, DummyMalwareRepoClient
 from microengine.backend import choose_backend
 
 
@@ -16,6 +16,11 @@ class CommonMicroEngineTests:
 
     def test_scan_random_mal_not(self):
         key_path, pw = get_test_key_and_pw()
+        me = self.micro_engine_cls(self.test_polyswarm_d_port, key_path, pw)
+
+        if hasattr(me, 'wait_for_backend'):
+            # todo move this to be part of the whole class
+            me.wait_for_backend()
 
         for t in [True, False]:
 
@@ -24,9 +29,10 @@ class CommonMicroEngineTests:
             event_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(event_loop)
 
+
             async def run_t():
 
-                me = self.micro_engine_cls(self.test_polyswarm_d_port, key_path, pw)
+
                 guid = str(uuid.uuid4())
                 cor = me.scan(guid, mal_content)
 
