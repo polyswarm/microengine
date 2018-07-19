@@ -1,9 +1,6 @@
 from setuptools import setup
 
 
-def parse_requirements():
-    with open('requirements.txt', 'r') as f:
-        return f.read().splitlines()
 
 
 setup(
@@ -14,7 +11,6 @@ setup(
     author_email='info@polyswarm.io',
     url='https://github.com/polyswarm/microengine',
     license='MIT',
-    install_requires=parse_requirements(),
     include_package_data=True,
     packages=['microengine'],
     package_dir={
