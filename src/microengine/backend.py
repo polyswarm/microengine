@@ -6,6 +6,16 @@ from microengine.scratch import ScratchMicroengine
 
 
 def choose_backend(backend):
+    """Resolves microengine name string to implementation
+
+    Args:
+        backend (str): Name of the backend to load, either one of the predefined
+            implementations or the name of a module to load
+    Returns:
+        (Class): Microengine class of the selected implementation
+    Raises:
+        (Exception): If backend is not found
+    """
     micro_engine_class = None
     if backend == 'scratch':
         # ScratchMicroengine(polyswarmd_addr, keyfile, password).run(testing)

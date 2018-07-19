@@ -1,5 +1,5 @@
 import click
-from src.microengine.backend import choose_backend
+from microengine.backend import choose_backend
 
 
 @click.command()
@@ -14,6 +14,15 @@ from src.microengine.backend import choose_backend
 @click.option('--testing', default=-1,
         help='Activate testing mode for integration testing, respond to N bounties then exit')
 def main(polyswarmd_addr, keyfile, password, backend, testing):
+    """Entrypoint for the microengine driver
+
+    Args:
+        polyswarmd_addr (str): Address of polyswarmd
+        keyfile (str): Path to private key file to use to sign transactions
+        password (str): Password to decrypt the encrypted private key
+        backend (str): Backend implementation to use
+        testing (int): Mode to process N bounties then exit (optional)
+    """
     micro_engine_class = choose_backend(backend)
 
     micro_engine_class(polyswarmd_addr, keyfile, password).run(testing)
