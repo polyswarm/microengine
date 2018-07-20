@@ -23,8 +23,8 @@ def main(polyswarmd_addr, keyfile, password, backend, testing):
         backend (str): Backend implementation to use
         testing (int): Mode to process N bounties then exit (optional)
     """
-    micro_engine_class = choose_backend(backend)
 
+    micro_engine_class = choose_backend(backend)
     micro_engine_class(polyswarmd_addr, keyfile, password).run(testing)
 
 if __name__ == '__main__':
