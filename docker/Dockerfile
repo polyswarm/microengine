@@ -46,6 +46,7 @@ RUN apk add --no-cache -t .build-deps py-setuptools \
   && echo "rule dummy { condition: true }" > /rules/test_rule \
   && rm -rf /tmp/*
 
+
 ## COPY IN MICROENGINE FILES
 WORKDIR /usr/src/app
 COPY requirements.txt ./
