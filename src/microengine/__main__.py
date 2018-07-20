@@ -27,5 +27,5 @@ def main(polyswarmd_addr, keyfile, password, backend, testing):
 
     micro_engine_class(polyswarmd_addr, keyfile, password).run(testing)
 
-if __name__ == '__main__':
+if __name__ ==  '__main__':
     main()
