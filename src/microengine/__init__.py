@@ -11,7 +11,7 @@ from web3.auto import w3 as web3
 # These values come from the BountyRegistry contract
 MINIMUM_BID = 62500000000000000
 ARBITER_VOTE_WINDOW = 25
-ASSERTION_REVEAL_WINDOW = 25
+ASSERTION_REVEAL_WINDOW = 100
 
 
 class Microengine(object):
@@ -379,11 +379,11 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     for a in assertions:
         sa = SecretAssertion(guid, a['index'], nonce, verdicts,
                              ';'.join(metadatas))
-        microengine.schedule_put(int(expiration) + ARBITER_VOTE_WINDOW, sa)
+        microengine.schedule_put(int(expiration), sa)
 
         ub = UnsettledBounty(guid)
         microengine.schedule_put(
-            int(expiration) + ARBITER_VOTE_WINDOW + ASSERTION_REVEAL_WINDOW,
+            int(expiration) + ASSERTION_REVEAL_WINDOW + ARBITER_VOTE_WINDOW,
             ub)
 
     return assertions
