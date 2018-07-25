@@ -29,6 +29,7 @@ class Microengine(object):
             password (str): Password to decrypt the encrypted private key
         """
         self.polyswarmd_addr = polyswarmd_addr
+        self.testing = -1
 
         with open(keyfile, 'r') as f:
             self.priv_key = web3.eth.account.decrypt(f.read(), password)
@@ -104,8 +105,9 @@ class Microengine(object):
         Args:
             testing (int): Mode to process N bounties then exit (optional)
         """
+        self.testing = testing
         asyncio.get_event_loop().run_until_complete(
-            listen_for_events(self, testing))
+            listen_for_events(self))
 
 
 @functools.total_ordering
@@ -217,8 +219,12 @@ async def post_transactions(microengine, session, transactions):
     uri = 'http://{0}/transactions'.format(microengine.polyswarmd_addr)
 
     async with session.post(uri, json={'transactions': signed}) as response:
-        return await response.json()
+        j = await response.json()
+        if microengine.testing >= 0 and 'errors' in j.get('result', {}):
+            print('Received transaction error in testing mode, exiting')
+            sys.exit(1)
 
+        return j
 
 async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     """Post an assertion to polyswarmd
@@ -404,17 +410,16 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     return assertions
 
 
-async def listen_for_events(microengine, testing=-1):
+async def listen_for_events(microengine):
     """Listen for events via websocket connection to polyswarmd
 
     Args:
         microengine (Microengine): The microengine instance
-        testing (int): Mode to process N bounties then exit (optional)
     """
     uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
     async with aiohttp.ClientSession() as session:
         async with websockets.connect(uri) as ws:
-            while testing != 0 or not microengine.schedule_empty():
+            while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
                 if event['event'] == 'block':
                     number = event['data']['number']
@@ -426,14 +431,14 @@ async def listen_for_events(microengine, testing=-1):
                     if block_results:
                         logging.info('Block results: %s', block_results)
                 elif event['event'] == 'bounty':
-                    if testing == 0:
+                    if microengine.testing == 0:
                         logging.info(
                             'bounty received but 0 bounties remaining in test mode, ignoring'
                         )
                         continue
-                    elif testing > 0:
-                        testing = testing - 1
-                        logging.info('%s bounties remaining in test mode', testing)
+                    elif microengine.testing > 0:
+                        microengine.testing = microengine.testing - 1
+                        logging.info('%s bounties remaining in test mode', microengine.testing)
 
                     bounty = event['data']
                     logging.info('received bounty: %s', bounty)
@@ -442,7 +447,7 @@ async def listen_for_events(microengine, testing=-1):
                         microengine, session, **bounty)
                     logging.info('created assertions: %s', assertions)
 
-            if testing == 0:
+            if microengine.testing == 0:
                 logging.info('exiting test mode')
                 # This is delayed by a few seconds, presumably for event loop cleanup
                 sys.exit(0)
