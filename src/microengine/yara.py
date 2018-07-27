@@ -1,18 +1,16 @@
-import clamd
+import yara
+from microengine import Microengine
+import tempfile
 import os
 
-from io import BytesIO
-from microengine import Microengine
+RULES_DIR = 'data/yara-rules/'
 
-CLAMD_HOST = os.getenv('CLAMD_HOST', 'localhost')
-CLAMD_PORT = int(os.getenv('CLAMD_PORT', '3310'))
-CLAMD_TIMEOUT = 30.0
 
-class ClamavMicroengine(Microengine):
-    """Microengine which scans samples through clamd"""
+class YaraMicroengine(Microengine):
+    """Microengine which matches samples against yara rules"""
 
     def __init__(self, polyswarmd_addr, keyfile, password):
-        """Initialize a ClamAV microengine
+        """Initialize a Yara microengine
 
         Args:
             polyswarmd_addr (str): Address of polyswarmd
@@ -20,10 +18,10 @@ class ClamavMicroengine(Microengine):
             password (str): Password to decrypt the encrypted private key
         """
         super().__init__(polyswarmd_addr, keyfile, password)
-        self.clamd = clamd.ClamdNetworkSocket(CLAMD_HOST, CLAMD_PORT, CLAMD_TIMEOUT)
+        self.rules = yara.compile(RULES_DIR + "malware/MALW_Eicar")
 
     async def scan(self, guid, content):
-        """Scan an artifact with ClamAV
+        """Scan an artifact with YARA
 
         Args:
             guid (str): GUID of the bounty under analysis, use to track artifacts in the same bounty
@@ -35,8 +33,8 @@ class ClamavMicroengine(Microengine):
             verdict (bool): Whether this artifact is malicious or not
             metadata (str): Optional metadata about this artifact
         """
-        result = self.clamd.instream(BytesIO(content)).get('stream')
-        if len(result) >= 2 and result[0] == 'FOUND':
-            return True, True, result[1]
+        matches = self.rules.match(data=content)
+        if matches:
+            return True, True, ''
 
         return True, False, ''

@@ -1,0 +1,40 @@
+version: '3'
+services:
+#  ambassador:
+#    image: "polyswarm/ambassador"
+#    depends_on:
+#      - polyswarmd
+#    environment:
+#      - POLYSWARMD_HOST=polyswarmd
+#      - POLYSWARMD_PORT=31337
+#    command: "./wait_and_run.sh"
+#  arbiter:
+#    image: "polyswarm/arbiter"
+#    depends_on:
+#      - polyswarmd
+#      - homechain
+#    environment:
+#      - PYTHONUNBUFFERED=1
+#      - POLYSWARM_HOST=http://polyswarmd:31337
+#      - GETH=http://homechain:8545
+#      - ADDRESS=0x34e583cf9c1789c3141538eec77d9f0b8f7e89f2
+#      - PASSWORD=password
+#      - CHAIN=home
+#    command: "./scripts/wait_for_it.sh -t 0 polyswarmd:31337 -- python arbiter.py --backend verbatim --test"
+  unittest:
+        image: "polyswarm/microengine"
+        depends_on:
+            - polyswarmd
+            - clamav
+        environment:
+           - POLYSWARMD_HOST=polyswarmd
+           - POLYSWARMD_PORT=31337
+           - POLYSWARMD_ADDR=polyswarmd:31337
+           - CLAMD_HOST=clamav
+           - CLAMD_PORT=3310
+        command: "./scripts/wait_for_it.sh -t 0 clamav:3310 -- python3 -m unittest microengine.test_builtins"
+  clamav:
+        image: "mkodockx/docker-clamav"
+        ports:
+          - 3310:3310
+

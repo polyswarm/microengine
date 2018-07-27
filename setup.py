@@ -1,9 +1,6 @@
 from setuptools import setup
 
 
-def parse_requirements():
-    with open('requirements.txt', 'r') as f:
-        return f.read().splitlines()
 
 
 setup(
@@ -14,13 +11,13 @@ setup(
     author_email='info@polyswarm.io',
     url='https://github.com/polyswarm/microengine',
     license='MIT',
-    install_requires=parse_requirements(),
     include_package_data=True,
     packages=['microengine'],
     package_dir={
         'microengine': 'src/microengine',
     },
+    data_files=[('test_data',['src/microengine/test_data/keyfile'])],
     entry_points={
-        'console_scripts': ['microengine=microengine.__main__:main'],
+        'console_scripts': ['microengine=microengine.__main__:main', 'microengine-unit-test=microengine.testbase:main'],
     },
 )
