@@ -1,8 +1,12 @@
 import click
+import logging
+import sys
 from microengine.backend import choose_backend
 
 
 @click.command()
+@click.option('--log', default='INFO',
+        help='Logging level')
 @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='localhost:31337',
         help='Address of polyswarmd instance')
 @click.option('--keyfile', envvar='MICROENGINE_KEYFILE', type=click.Path(exists=True), default='keyfile',
@@ -13,7 +17,7 @@ from microengine.backend import choose_backend
         help='Backend to use')
 @click.option('--testing', default=-1,
         help='Activate testing mode for integration testing, respond to N bounties then exit')
-def main(polyswarmd_addr, keyfile, password, backend, testing):
+def main(log, polyswarmd_addr, keyfile, password, backend, testing):
     """Entrypoint for the microengine driver
 
     Args:
@@ -23,6 +27,12 @@ def main(polyswarmd_addr, keyfile, password, backend, testing):
         backend (str): Backend implementation to use
         testing (int): Mode to process N bounties then exit (optional)
     """
+
+    loglevel = getattr(logging, log.upper(), None)
+    if not isinstance(loglevel, int):
+        logging.error('invalid log level')
+        sys.exit(-1)
+    logging.basicConfig(level=loglevel)
 
     micro_engine_class = choose_backend(backend)
     micro_engine_class(polyswarmd_addr, keyfile, password).run(testing)
