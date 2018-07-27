@@ -24,7 +24,7 @@ services:
   unittest:
         image: "polyswarm/microengine"
         depends_on:
-#            - polyswarmd
+            - polyswarmd
             - clamav
         environment:
            - POLYSWARMD_HOST=polyswarmd

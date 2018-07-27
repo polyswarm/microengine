@@ -1,5 +1,6 @@
 import aiohttp
 import asyncio
+import base58
 import functools
 import json
 import sys
@@ -163,6 +164,16 @@ def check_response(response):
     return response['status'] == 'OK'
 
 
+def is_valid_ipfs_hash(ipfs_hash):
+    # TODO: Further multihash validation
+    try:
+        return len(ipfs_hash) < 100 and base58.b58decode(ipfs_hash)
+    except:
+        pass
+
+    return False
+
+
 async def get_artifact(microengine, session, ipfs_hash, index):
     """Retrieve an artifact from IPFS via polyswarmd
 
@@ -174,6 +185,9 @@ async def get_artifact(microengine, session, ipfs_hash, index):
     Returns:
         (bytes): Content of the artifact
     """
+    if not is_valid_ipfs_hash(ipfs_hash):
+        return None
+
     uri = 'http://{0}/artifacts/{1}/{2}'.format(microengine.polyswarmd_addr,
                                                 ipfs_hash, index)
     async with session.get(uri) as response:
