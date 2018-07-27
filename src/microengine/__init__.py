@@ -3,6 +3,7 @@ import asyncio
 import base58
 import functools
 import json
+import logging
 import sys
 import websockets
 
@@ -34,7 +35,7 @@ class Microengine(object):
 
         self.address = web3.eth.account.privateKeyToAccount(
             self.priv_key).address
-        print('Using account:', self.address)
+        logging.info('Using account: %s', self.address)
         self.schedule = PriorityQueue()
 
     async def scan(self, guid, content):
@@ -256,7 +257,7 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     try:
         return nonce, response['result']['assertions']
     except:
-        print('expected assertion, got:', response)
+        logging.warning('expected assertion, got: %s', response)
         return None, []
 
 
@@ -298,7 +299,7 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
     try:
         return response['result']['reveals']
     except:
-        print('expected reveal, got:', response)
+        logging.warning('expected reveal, got: %s', response)
         return None
 
 
@@ -330,7 +331,7 @@ async def settle_bounty(microengine, session, guid):
     try:
         return response['result']['transfers']
     except:
-        print('expected transfer, got:', response)
+        logging.warning('expected transfer, got: %s', response)
         return None
 
 
@@ -378,10 +379,10 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     for i in range(256):
         content = await get_artifact(microengine, session, uri, i)
         if not content:
-            print('no more artifacts')
+            logging.debug('no more artifacts')
             break
 
-        print('scanning artifact:', i)
+        logging.info('scanning artifact: %s', i)
         bit, verdict, metadata = await microengine.scan(guid, content)
         mask.append(bit)
         verdicts.append(verdict)
@@ -418,30 +419,30 @@ async def listen_for_events(microengine, testing=-1):
                 if event['event'] == 'block':
                     number = event['data']['number']
                     if number % 100 == 0:
-                        print('Block', number)
+                        logging.debug('Block %s', number)
 
                     block_results = await handle_new_block(
                         microengine, session, number)
                     if block_results:
-                        print(block_results)
+                        logging.info('Block results: %s', block_results)
                 elif event['event'] == 'bounty':
                     if testing == 0:
-                        print(
+                        logging.info(
                             'bounty received but 0 bounties remaining in test mode, ignoring'
                         )
                         continue
                     elif testing > 0:
                         testing = testing - 1
-                        print(testing, 'bounties remaining in test mode')
+                        logging.info('%s bounties remaining in test mode', testing)
 
                     bounty = event['data']
-                    print('received bounty:', bounty)
+                    logging.info('received bounty: %s', bounty)
 
                     assertions = await handle_new_bounty(
                         microengine, session, **bounty)
-                    print('created assertions:', assertions)
+                    logging.info('created assertions: %s', assertions)
 
             if testing == 0:
-                print('exiting test mode')
+                logging.info('exiting test mode')
                 # This is delayed by a few seconds, presumably for event loop cleanup
                 sys.exit(0)
