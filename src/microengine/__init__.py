@@ -221,7 +221,7 @@ async def post_transactions(microengine, session, transactions):
     async with session.post(uri, json={'transactions': signed}) as response:
         j = await response.json()
         if microengine.testing >= 0 and 'errors' in j.get('result', {}):
-            print('Received transaction error in testing mode, exiting')
+            logging.error('Received transaction error in testing mode: %s', j)
             sys.exit(1)
 
         return j
