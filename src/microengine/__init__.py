@@ -100,14 +100,34 @@ class Microengine(object):
         """
         self.schedule.put((block_number, obj))
 
-    def run(self, testing=-1):
+
+    async def run_sockets(self, testing, offers, loop):
         """Run this microengine
 
         Args:
             testing (int): Mode to process N bounties then exit (optional)
         """
         self.testing = testing
+<<<<<<< HEAD
         asyncio.get_event_loop().run_until_complete(listen_for_events(self))
+=======
+        self.offers = offers
+
+        tasks = [asyncio.ensure_future(listen_for_events(self, loop))]
+
+
+        if offers:
+            tasks.append(asyncio.ensure_future(listen_for_offers(self, loop)))
+
+        await asyncio.gather(*tasks)
+
+    def run(self, testing=-1, offers=False):
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_until_complete(self.run_sockets(testing, offers, loop))
+        finally:
+            loop.close()
+>>>>>>> create multiwebsocket setup
 
 
 @functools.total_ordering
@@ -410,7 +430,63 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     return assertions
 
 
-async def listen_for_events(microengine):
+async def listen_for_events(microengine, loop):
+    """Listen for events via websocket connection to polyswarmd
+
+    Args:
+        microengine (Microengine): The microengine instance
+    """
+    print('colin seale****************************************************************************************************************************************************')
+    uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
+    async with aiohttp.ClientSession() as session:
+        async with websockets.connect(uri) as ws:
+            while microengine.testing != 0 or not microengine.schedule_empty():
+                event = json.loads(await ws.recv())
+                logging.debug('Event from events function %s', event)
+
+    #             if event['event'] == 'block':
+    #                 number = event['data']['number']
+    #                 if number % 100 == 0:
+    #                     logging.debug('Block %s', number)
+
+    #                 block_results = await handle_new_block(
+    #                     microengine, session, number)
+    #                 if block_results:
+    #                     logging.info('Block results: %s', block_results)
+    #             elif event['event'] == 'bounty':
+    #                 if microengine.testing == 0:
+    #                     logging.info(
+    #                         'bounty received but 0 bounties remaining in test mode, ignoring'
+    #                     )
+    #                     continue
+    #                 elif microengine.testing > 0:
+    #                     microengine.testing = microengine.testing - 1
+    #                     logging.info('%s bounties remaining in test mode', microengine.testing)
+
+    #                 bounty = event['data']
+    #                 logging.info('received bounty: %s', bounty)
+
+    #                 assertions = await handle_new_bounty(
+    #                     microengine, session, **bounty)
+    #                 logging.info('created assertions: %s', assertions)
+
+    #         if microengine.testing == 0:
+    #             logging.info('exiting test mode')
+    #             # This is delayed by a few seconds, presumably for event loop cleanup
+    #             sys.exit(0)
+
+
+async def listen_for_messages(microengine, loop):
+    print('RUNNING listen_for_messages here !!!!!!!')
+    uri = 'ws://{0}/{1}/messages'.format(microengine.polyswarmd_addr, event['data']['guid'])
+    async with aiohttp.ClientSession() as session:
+        async with websockets.connect(uri) as message_ws:
+            while True:
+                init_event = json.loads(await message_ws.recv())
+                print(init_event)
+        
+
+async def listen_for_offers(microengine, loop):
     """Listen for events via websocket connection to polyswarmd
 
     Args:
@@ -422,6 +498,7 @@ async def listen_for_events(microengine):
         async with websockets.connect(uri, extra_headers=headers) as ws:
             while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
+<<<<<<< HEAD
                 if event['event'] == 'block':
                     number = event['data']['number']
                     if number % 100 == 0:
@@ -453,3 +530,38 @@ async def listen_for_events(microengine):
                 logging.info('exiting test mode')
                 # This is delayed by a few seconds, presumably for event loop cleanup
                 sys.exit(0)
+=======
+                logging.debug('Event from offers function %s', event)
+                # if event['event'] == 'initialized_channel':
+                #     asyncio.ensure_future(listen_for_messages(), loop=loop)
+                # if event['event'] == 'block':
+                #     number = event['data']['number']
+                #     if number % 100 == 0:
+                #         logging.debug('Block %s', number)
+
+                #     block_results = await handle_new_block(
+                #         microengine, session, number)
+                #     if block_results:
+                #         logging.info('Block results: %s', block_results)
+                # elif event['event'] == 'bounty':
+                #     if microengine.testing == 0:
+                #         logging.info(
+                #             'bounty received but 0 bounties remaining in test mode, ignoring'
+                #         )
+                #         continue
+                #     elif microengine.testing > 0:
+                #         microengine.testing = microengine.testing - 1
+                #         logging.info('%s bounties remaining in test mode', microengine.testing)
+
+                #     bounty = event['data']
+                #     logging.info('received bounty: %s', bounty)
+
+                #     assertions = await handle_new_bounty(
+                #         microengine, session, **bounty)
+                #     logging.info('created assertions: %s', assertions)
+
+            # if microengine.testing == 0:
+            #     logging.info('exiting test mode')
+            #     # This is delayed by a few seconds, presumably for event loop cleanup
+            #     sys.exit(0)
+>>>>>>> create multiwebsocket setup
