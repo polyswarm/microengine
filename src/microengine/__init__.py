@@ -20,7 +20,7 @@ class Microengine(object):
     """Base class for microengines, override scan() and/or bid() to customize
     behavior"""
 
-    def __init__(self, polyswarmd_addr, keyfile, password):
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None):
         """Initialize a microengine
 
         Args:
@@ -29,6 +29,7 @@ class Microengine(object):
             password (str): Password to decrypt the encrypted private key
         """
         self.polyswarmd_addr = polyswarmd_addr
+        self.api_key = api_key
         self.testing = -1
 
         with open(keyfile, 'r') as f:
@@ -106,8 +107,7 @@ class Microengine(object):
             testing (int): Mode to process N bounties then exit (optional)
         """
         self.testing = testing
-        asyncio.get_event_loop().run_until_complete(
-            listen_for_events(self))
+        asyncio.get_event_loop().run_until_complete(listen_for_events(self))
 
 
 @functools.total_ordering
@@ -193,7 +193,7 @@ async def get_artifact(microengine, session, ipfs_hash, index):
 
     uri = 'http://{0}/artifacts/{1}/{2}'.format(microengine.polyswarmd_addr,
                                                 ipfs_hash, index)
-    async with session.get(uri) as response:
+    async with session.get(uri, headers=headers) as response:
         if response.status == 200:
             return await response.read()
 
@@ -217,7 +217,6 @@ async def post_transactions(microengine, session, transactions):
         signed.append(raw)
 
     uri = 'http://{0}/transactions'.format(microengine.polyswarmd_addr)
-
     async with session.post(uri, json={'transactions': signed}) as response:
         j = await response.json()
         if microengine.testing >= 0 and 'errors' in j.get('result', {}):
@@ -225,6 +224,7 @@ async def post_transactions(microengine, session, transactions):
             sys.exit(1)
 
         return j
+
 
 async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     """Post an assertion to polyswarmd
@@ -239,8 +239,8 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
-    uri = 'http://{0}/bounties/{1}/assertions?account={2}'.format(
-        microengine.polyswarmd_addr, guid, microengine.address)
+    uri = 'http://{0}/bounties/{1}/assertions'.format(
+        microengine.polyswarmd_addr, guid)
     assertion = {
         'bid': str(bid),
         'mask': mask,
@@ -282,8 +282,8 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
-    uri = 'http://{0}/bounties/{1}/assertions/{2}/reveal?account={3}'.format(
-        microengine.polyswarmd_addr, guid, index, microengine.address)
+    uri = 'http://{0}/bounties/{1}/assertions/{2}/reveal'.format(
+        microengine.polyswarmd_addr, guid, index)
     reveal = {
         'nonce': nonce,
         'verdicts': verdicts,
@@ -319,9 +319,8 @@ async def settle_bounty(microengine, session, guid):
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
-    uri = 'http://{0}/bounties/{1}/settle?account={2}'.format(
-        microengine.polyswarmd_addr, guid, microengine.address)
-
+    uri = 'http://{0}/bounties/{1}/settle'.format(microengine.polyswarmd_addr,
+                                                  guid)
     async with session.post(uri) as response:
         response = await response.json()
 
@@ -352,7 +351,8 @@ async def handle_new_block(microengine, session, number):
         Response JSON parsed from polyswarmd containing emitted events
     """
     ret = []
-    while microengine.schedule_peek() and microengine.schedule_peek()[0] < number:
+    while microengine.schedule_peek(
+    ) and microengine.schedule_peek()[0] < number:
         exp, task = microengine.schedule_get()
         if isinstance(task, SecretAssertion):
             ret.append(await
@@ -417,8 +417,9 @@ async def listen_for_events(microengine):
         microengine (Microengine): The microengine instance
     """
     uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
-    async with aiohttp.ClientSession() as session:
-        async with websockets.connect(uri) as ws:
+    headers = {'Authorization': self.api_key} if self.api_key else {}
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with websockets.connect(uri, extra_headers=headers) as ws:
             while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
                 if event['event'] == 'block':
@@ -438,7 +439,8 @@ async def listen_for_events(microengine):
                         continue
                     elif microengine.testing > 0:
                         microengine.testing = microengine.testing - 1
-                        logging.info('%s bounties remaining in test mode', microengine.testing)
+                        logging.info('%s bounties remaining in test mode',
+                                     microengine.testing)
 
                     bounty = event['data']
                     logging.info('received bounty: %s', bounty)
