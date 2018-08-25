@@ -6,7 +6,7 @@ import json
 import logging
 import sys
 import websockets
-
+from eth_account.messages import defunct_hash_message
 from queue import PriorityQueue
 from web3.auto import w3 as web3
 
@@ -101,33 +101,35 @@ class Microengine(object):
         self.schedule.put((block_number, obj))
 
 
-    async def run_sockets(self, testing, offers, loop):
+    async def run_sockets(self, testing, offers, loop = False):
         """Run this microengine
 
         Args:
             testing (int): Mode to process N bounties then exit (optional)
         """
+<<<<<<< HEAD
         self.testing = testing
 <<<<<<< HEAD
         asyncio.get_event_loop().run_until_complete(listen_for_events(self))
 =======
         self.offers = offers
+=======
+        testing = testing
+        offers = offers
+>>>>>>> add offer message response
 
         tasks = [asyncio.ensure_future(listen_for_events(self, loop))]
 
-
-        if offers:
-            tasks.append(asyncio.ensure_future(listen_for_offers(self, loop)))
-
         await asyncio.gather(*tasks)
 
-    def run(self, testing=-1, offers=False):
+    def run(self, testing=-1, offers=True):
         loop = asyncio.get_event_loop()
         try:
             loop.run_until_complete(self.run_sockets(testing, offers, loop))
         finally:
             loop.close()
 >>>>>>> create multiwebsocket setup
+
 
 
 @functools.total_ordering
@@ -429,64 +431,32 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
 
     return assertions
 
+def sign_state(state, private_key):
+    def to_32byte_hex(val):
+       return web3.toHex(web3.toBytes(val).rjust(32, b'\0'))
+
+    state_hash = to_32byte_hex(web3.sha3(hexstr=state))
+    state_hash = defunct_hash_message(hexstr=state_hash)
+    sig = web3.eth.account.signHash((state_hash), private_key=private_key)
+
+    return {'r':web3.toHex(sig.r), 'v':sig.v, 's':web3.toHex(sig.s), 'state': state}
+
+
+
+async def join_offer(microengine, session, guid, sig):
+    uri = 'http://{0}/offers/{1}/join?account={2}'.format(
+        microengine.polyswarmd_addr, guid, microengine.address)
+
+    async with session.post(uri, json=sig) as response:
+        response = await response.json()
+
+    if not check_response(response):
+        return Nonce
+
+    response = await post_transactions(microengine, session,
+                                       response['result']['transactions'])
 
 async def listen_for_events(microengine, loop):
-    """Listen for events via websocket connection to polyswarmd
-
-    Args:
-        microengine (Microengine): The microengine instance
-    """
-    print('colin seale****************************************************************************************************************************************************')
-    uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
-    async with aiohttp.ClientSession() as session:
-        async with websockets.connect(uri) as ws:
-            while microengine.testing != 0 or not microengine.schedule_empty():
-                event = json.loads(await ws.recv())
-                logging.debug('Event from events function %s', event)
-
-    #             if event['event'] == 'block':
-    #                 number = event['data']['number']
-    #                 if number % 100 == 0:
-    #                     logging.debug('Block %s', number)
-
-    #                 block_results = await handle_new_block(
-    #                     microengine, session, number)
-    #                 if block_results:
-    #                     logging.info('Block results: %s', block_results)
-    #             elif event['event'] == 'bounty':
-    #                 if microengine.testing == 0:
-    #                     logging.info(
-    #                         'bounty received but 0 bounties remaining in test mode, ignoring'
-    #                     )
-    #                     continue
-    #                 elif microengine.testing > 0:
-    #                     microengine.testing = microengine.testing - 1
-    #                     logging.info('%s bounties remaining in test mode', microengine.testing)
-
-    #                 bounty = event['data']
-    #                 logging.info('received bounty: %s', bounty)
-
-    #                 assertions = await handle_new_bounty(
-    #                     microengine, session, **bounty)
-    #                 logging.info('created assertions: %s', assertions)
-
-    #         if microengine.testing == 0:
-    #             logging.info('exiting test mode')
-    #             # This is delayed by a few seconds, presumably for event loop cleanup
-    #             sys.exit(0)
-
-
-async def listen_for_messages(microengine, loop):
-    print('RUNNING listen_for_messages here !!!!!!!')
-    uri = 'ws://{0}/{1}/messages'.format(microengine.polyswarmd_addr, event['data']['guid'])
-    async with aiohttp.ClientSession() as session:
-        async with websockets.connect(uri) as message_ws:
-            while True:
-                init_event = json.loads(await message_ws.recv())
-                print(init_event)
-        
-
-async def listen_for_offers(microengine, loop):
     """Listen for events via websocket connection to polyswarmd
 
     Args:
@@ -499,7 +469,14 @@ async def listen_for_offers(microengine, loop):
             while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
 <<<<<<< HEAD
+<<<<<<< HEAD
                 if event['event'] == 'block':
+=======
+                if event['event'] == 'initialized_channel':
+                    task = loop.create_task(listen_for_messages(microengine, event['data']['guid']))
+
+                if event['event'] == 'block':f
+>>>>>>> add offer message response
                     number = event['data']['number']
                     if number % 100 == 0:
                         logging.debug('Block %s', number)
@@ -516,8 +493,12 @@ async def listen_for_offers(microengine, loop):
                         continue
                     elif microengine.testing > 0:
                         microengine.testing = microengine.testing - 1
+<<<<<<< HEAD
                         logging.info('%s bounties remaining in test mode',
                                      microengine.testing)
+=======
+                        logging.info('%s bounties remaining in test mode', microengine.testing)
+>>>>>>> add offer message response
 
                     bounty = event['data']
                     logging.info('received bounty: %s', bounty)
@@ -530,6 +511,7 @@ async def listen_for_offers(microengine, loop):
                 logging.info('exiting test mode')
                 # This is delayed by a few seconds, presumably for event loop cleanup
                 sys.exit(0)
+<<<<<<< HEAD
 =======
                 logging.debug('Event from offers function %s', event)
                 # if event['event'] == 'initialized_channel':
@@ -565,3 +547,40 @@ async def listen_for_offers(microengine, loop):
             #     # This is delayed by a few seconds, presumably for event loop cleanup
             #     sys.exit(0)
 >>>>>>> create multiwebsocket setup
+=======
+
+async def listen_for_messages(microengine, guid):
+    uri = 'ws://{0}/messages/{1}'.format(microengine.polyswarmd_addr, guid)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with websockets.connect(uri) as ws:
+                while not ws.closed:
+                    msg = json.loads(await ws.recv())
+                    if 'type' in msg and msg['type'] == 'open':
+                        sig = sign_state(msg['raw_state'], microengine.priv_key)
+                        await join_offer(microengine, session, guid, sig)
+                        sig['type'] = 'join'
+                        await ws.send(json.dumps(sig))
+                    elif msg['type'] == 'offer':
+                        sig = sign_state(msg['raw_state'], microengine.priv_key)
+                        sig['type'] = 'accept'
+                        content = await get_artifact(microengine, session, msg['state']['ipfs_hash'], 0)
+                        microengine.scan(guid, content)
+                        pass
+                    elif msg['type'] == 'decline':
+                        pass
+                    elif msg['type'] == 'settle':
+                        pass
+                    elif msg['type'] == 'dispute':
+                        pass
+                    elif msg['type'] == 'close':
+                        pass
+
+            
+    except Exception as e:
+        raise e
+    else:
+        pass
+
+        
+>>>>>>> add offer message response

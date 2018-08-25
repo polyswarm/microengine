@@ -29,9 +29,7 @@ def main(log, polyswarmd_addr, keyfile, password, api_key, backend, testing):
         backend (str): Backend implementation to use
         api_key(str): API key to use with polyswarmd
         testing (int): Mode to process N bounties then exit (optional)
-        offers (bool): If this microengine should listen for, accept, scan on offers
     """
-
     loglevel = getattr(logging, log.upper(), None)
     if not isinstance(loglevel, int):
         logging.error('invalid log level')
@@ -39,11 +37,7 @@ def main(log, polyswarmd_addr, keyfile, password, api_key, backend, testing):
     logging.basicConfig(level=loglevel)
 
     micro_engine_class = choose_backend(backend)
-<<<<<<< HEAD
     micro_engine_class(polyswarmd_addr, keyfile, password, api_key).run(testing)
-=======
-    micro_engine_class(polyswarmd_addr, keyfile, password).run(testing, offers)
->>>>>>> create multiwebsocket setup
 
 if __name__ ==  '__main__':
     main()
