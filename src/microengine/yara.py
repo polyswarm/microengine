@@ -9,7 +9,7 @@ RULES_DIR = 'data/yara-rules/'
 class YaraMicroengine(Microengine):
     """Microengine which matches samples against yara rules"""
 
-    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None:
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None):
         """Initialize a Yara microengine
 
         Args:
