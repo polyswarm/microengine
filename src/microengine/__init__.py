@@ -193,7 +193,7 @@ async def get_artifact(microengine, session, ipfs_hash, index):
 
     uri = 'http://{0}/artifacts/{1}/{2}'.format(microengine.polyswarmd_addr,
                                                 ipfs_hash, index)
-    async with session.get(uri, headers=headers) as response:
+    async with session.get(uri) as response:
         if response.status == 200:
             return await response.read()
 
@@ -417,7 +417,7 @@ async def listen_for_events(microengine):
         microengine (Microengine): The microengine instance
     """
     uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
-    headers = {'Authorization': self.api_key} if self.api_key else {}
+    headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
     async with aiohttp.ClientSession(headers=headers) as session:
         async with websockets.connect(uri, extra_headers=headers) as ws:
             while microengine.testing != 0 or not microengine.schedule_empty():
