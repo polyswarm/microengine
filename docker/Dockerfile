@@ -4,7 +4,7 @@ ENV YARA_VERSION 3.7.1
 ENV YARA_PY_VERSION 3.7.0
 
 ## INSTALL YARA DEPS, BUILD YARA
-RUN apk add --no-cache openssl file jansson bison python python3 tini su-exec && python3 -m ensurepip &&\
+RUN apk add --no-cache openssl file jansson bison python python3 tini su-exec jq curl && python3 -m ensurepip &&\
 pip3 install --upgrade pip setuptools && \
 if [ ! -e /usr/bin/pip ]; then ln -s pip3 /usr/bin/pip ; fi && \
 if [[ ! -e /usr/bin/python ]]; then ln -sf /usr/bin/python3 /usr/bin/python; fi

@@ -13,11 +13,13 @@ from microengine.backend import choose_backend
         help='Keystore file containing the private key to use with this microengine')
 @click.option('--password', envvar='MICROENGINE_PASSWORD', prompt=True, hide_input=True,
         help='Password to decrypt the keyfile with')
+@click.option('--api-key', envvar='API_KEY', default='',
+        help='API key to use with polyswarmd')
 @click.option('--backend', envvar='MICROENGINE_BACKEND', default='scratch',
         help='Backend to use')
 @click.option('--testing', default=-1,
         help='Activate testing mode for integration testing, respond to N bounties then exit')
-def main(log, polyswarmd_addr, keyfile, password, backend, testing):
+def main(log, polyswarmd_addr, keyfile, password, api_key, backend, testing):
     """Entrypoint for the microengine driver
 
     Args:
@@ -25,6 +27,7 @@ def main(log, polyswarmd_addr, keyfile, password, backend, testing):
         keyfile (str): Path to private key file to use to sign transactions
         password (str): Password to decrypt the encrypted private key
         backend (str): Backend implementation to use
+        api_key(str): API key to use with polyswarmd
         testing (int): Mode to process N bounties then exit (optional)
     """
 
@@ -35,7 +38,7 @@ def main(log, polyswarmd_addr, keyfile, password, backend, testing):
     logging.basicConfig(level=loglevel)
 
     micro_engine_class = choose_backend(backend)
-    micro_engine_class(polyswarmd_addr, keyfile, password).run(testing)
+    micro_engine_class(polyswarmd_addr, keyfile, password, api_key).run(testing)
 
 if __name__ ==  '__main__':
     main()
