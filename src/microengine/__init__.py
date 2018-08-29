@@ -53,6 +53,7 @@ class Microengine(object):
             verdict (bool): Whether this artifact is malicious or not
             metadata (str): Optional metadata about this artifact
         """
+
         return True, True, ''
 
     def bid(self, guid):
@@ -130,6 +131,30 @@ class Microengine(object):
             loop.close()
 >>>>>>> create multiwebsocket setup
 
+class OfferChannel(object):
+    def __init__(self, guid, offer_amount = 0, ambassador_balance = 0, expert_balance = 0):
+
+        self.guid = guid
+        self.offer_amount = offer_amount
+        self.ambassador_balance = ambassador_balance
+        self.expert_balance = expert_balance
+        self.nonce = 0
+        self.last_message = None
+
+    def set_state(self, state):
+        # TODO: change to be a persistant database so all the assersions can be saved
+        # cureent saving just the last state/signiture for disputes
+
+        self.offer_amount = state['state']['offer_amount']
+        self.ambassador_balance = state['state']['ambassador_balance']
+        self.expert_balance = state['state']['expert_balance']
+        self.last_message = state
+
+    def __eq__(self, other):
+        return self.guid == other.guid
+
+    def __lt__(self, other):
+        return self.guid < other.guid
 
 
 @functools.total_ordering
@@ -197,6 +222,11 @@ def is_valid_ipfs_hash(ipfs_hash):
         pass
 
     return False
+
+
+async def generate_state(session, microengine, **kwargs):
+    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/state', json=kwargs) as response:
+        return (await response.json())['result']['state']
 
 
 async def get_artifact(microengine, session, ipfs_hash, index):
@@ -441,20 +471,34 @@ def sign_state(state, private_key):
 
     return {'r':web3.toHex(sig.r), 'v':sig.v, 's':web3.toHex(sig.s), 'state': state}
 
-
-
 async def join_offer(microengine, session, guid, sig):
     uri = 'http://{0}/offers/{1}/join?account={2}'.format(
         microengine.polyswarmd_addr, guid, microengine.address)
 
     async with session.post(uri, json=sig) as response:
-        response = await response.json()
+        response = await response.json(), offer_c
 
     if not check_response(response):
         return Nonce
 
     response = await post_transactions(microengine, session,
                                        response['result']['transactions'])
+
+
+
+async def challenge_settle(microengine, offer_channel, session, ws, guid):
+    prev_state = offer_channel.last_message
+
+    sig = sign_state(prev_state['raw_state'], microengine.priv_key)
+
+    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/' + str(guid) + '/challenge?account=' + microengine.address, json=create_signiture_dict(sig, prev_state, prev_state['raw_state'])) as response:
+        response = await response.json()
+
+    transactions = response['result']['transactions']
+
+    ret = await post_transactions(session, transactions)
+
+    return ret
 
 async def listen_for_events(microengine, loop):
     """Listen for events via websocket connection to polyswarmd
@@ -473,8 +517,9 @@ async def listen_for_events(microengine, loop):
                 if event['event'] == 'block':
 =======
                 if event['event'] == 'initialized_channel':
-                    task = loop.create_task(listen_for_messages(microengine, event['data']['guid']))
-
+                    offer_channel = OfferChannel(event['data']['guid'])
+                    task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
+                    task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
                 if event['event'] == 'block':f
 >>>>>>> add offer message response
                     number = event['data']['number']
@@ -549,7 +594,67 @@ async def listen_for_events(microengine, loop):
 >>>>>>> create multiwebsocket setup
 =======
 
-async def listen_for_messages(microengine, guid):
+async def accept_offer(microengine, session, ws, offer_message):
+    current_state = offer_message['state']
+    uri = offer_message['artifact']
+
+    mask = []
+    verdicts = []
+    for i in range(256):
+        content = await get_artifact(microengine, session, uri, i)
+        if not content:
+            logging.debug('no more artifacts')
+            break
+        
+        logging.info('scanning artifact: %s', i)
+
+        # bit, verdict, metadata = await microengine.scan(guid, content)
+        verdicts.append(True)
+        mask.append(True)
+
+    raw_state = await generate_state(session, microengine, close_flag=1,
+        nonce=current_state['nonce'] + 1,
+        ambassador=current_state['ambassador'],
+        expert=microengine.address,
+        msig_address= current_state['msig_address'],
+        ambassador_balance= current_state['ambassador_balance'] - current_state['offer_amount'],
+        expert_balance= current_state['expert_balance'] + current_state['offer_amount'],
+        artifact_hash=uri, guid=str(current_state['guid']),
+        offer_amount=current_state['offer_amount'],
+        mask=mask, 
+        verdicts=verdicts)
+
+    sig = sign_state(raw_state, microengine.priv_key)
+    
+    sig['type'] = 'accept'
+    sig['artifact'] = offer_message['artifact']
+
+    await ws.send(json.dumps(sig))
+
+
+async def listen_for_offer_events(microengine, offer_channel, guid):
+    uri = 'ws://{0}/events/{1}'.format(microengine.polyswarmd_addr, guid)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with websockets.connect(uri) as ws:
+                while not ws.closed:
+                    event = json.loads(await ws.recv())
+                    if event['event'] == 'closed_agreement':
+                        ws.close()
+                    elif event['event'] == 'settle_started':
+                        nonce = int(event['data']['nonce'])
+                        if nonce < offer_channel.nonce:
+                            await challenge_settle(microengine, offer_channel, session, ws, guid)
+                    elif event['event'] == 'settle_challenged':
+                        if nonce < offer_channel.nonce:
+                            await challenge_settle(microengine, offer_channel, session, ws, guid)
+    except Exception as e:
+        raise e
+    else:
+        pass
+        
+
+async def listen_for_offer_messages(microengine, offer_channel, guid):
     uri = 'ws://{0}/messages/{1}'.format(microengine.polyswarmd_addr, guid)
     try:
         async with aiohttp.ClientSession() as session:
@@ -561,21 +666,15 @@ async def listen_for_messages(microengine, guid):
                         await join_offer(microengine, session, guid, sig)
                         sig['type'] = 'join'
                         await ws.send(json.dumps(sig))
+                        offer_channel.set_state(msg)
                     elif msg['type'] == 'offer':
-                        sig = sign_state(msg['raw_state'], microengine.priv_key)
-                        sig['type'] = 'accept'
-                        content = await get_artifact(microengine, session, msg['state']['ipfs_hash'], 0)
-                        microengine.scan(guid, content)
-                        pass
-                    elif msg['type'] == 'decline':
-                        pass
-                    elif msg['type'] == 'settle':
-                        pass
-                    elif msg['type'] == 'dispute':
-                        pass
+                        await accept_offer(microengine, session, ws, msg)
+                        offer_channel.set_state(msg)
                     elif msg['type'] == 'close':
-                        pass
-
+                        sig = sign_state(msg['raw_state'], microengine.priv_key)
+                        sig['type'] = 'close'
+                        await ws.send(json.dumps(sig))
+                        ws.close()
             
     except Exception as e:
         raise e
