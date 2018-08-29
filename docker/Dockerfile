@@ -21,7 +21,6 @@ RUN apk add --no-cache -t .build-deps py-setuptools \
                                 libtool \
                                 flex \
                                 git \
-                                git \
   && set -x \
   && echo "Install Yara from source..." \
   && cd /tmp/ \
