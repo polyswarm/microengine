@@ -12,11 +12,13 @@ setup(
     url='https://github.com/polyswarm/microengine',
     license='MIT',
     include_package_data=True,
-    packages=['microengine', 'microengine-unit-test'],
+    packages=['microengine'],
     package_dir={
-        'microengine': 'src/microengine', 'microengine-unit-test': 'src/microengine',
+        'microengine': 'src/microengine',
     },
-    data_files=[('test_data',['src/microengine/test_data/keyfile'])],
+    package_data={
+        'microengine': ['test_data/keyfile'],
+    },
     entry_points={
         'console_scripts': ['microengine=microengine.__main__:main', 'microengine-unit-test=microengine.testbase:main'],
     },
