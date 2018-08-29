@@ -2,9 +2,9 @@ import importlib
 
 from microengine.clamav import ClamavMicroengine
 from microengine.eicar import EicarMicroengine
-# from microengine.multi import MultiMicroengine
+from microengine.multi import MultiMicroengine
 from microengine.scratch import ScratchMicroengine
-# from microengine.yara import YaraMicroengine
+from microengine.yara import YaraMicroengine
 
 
 def choose_backend(backend):
@@ -20,7 +20,7 @@ def choose_backend(backend):
     """
     micro_engine_class = None
     if backend == 'scratch':
-        # ScratchMicroengine(polyswarmd_addr, keyfile, password).run(testing)
+        ScratchMicroengine(polyswarmd_addr, keyfile, password).run(testing)
         micro_engine_class = ScratchMicroengine
     elif backend == 'eicar':
         micro_engine_class = EicarMicroengine  # EicarMicroengine(polyswarmd_addr, keyfile, password).run(testing)
