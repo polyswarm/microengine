@@ -2,9 +2,9 @@ import importlib
 
 from microengine.clamav import ClamavMicroengine
 from microengine.eicar import EicarMicroengine
-from microengine.multi import MultiMicroengine
+# from microengine.multi import MultiMicroengine
 from microengine.scratch import ScratchMicroengine
-from microengine.yara import YaraMicroengine
+# from microengine.yara import YaraMicroengine
 
 
 def choose_backend(backend):
