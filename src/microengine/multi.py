@@ -11,7 +11,7 @@ CLAMD_PORT = int(os.getenv('CLAMD_PORT', '3310'))
 CLAMD_TIMEOUT = 30.0
 
 # Yara rules import
-RULES_DIR = 'data/yara-rules/'
+RULES_DIR = '/data/yara-rules/'
 
 
 class MultiMicroengine(Microengine):
