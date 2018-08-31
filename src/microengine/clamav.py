@@ -2,7 +2,7 @@ import clamd
 import os
 
 from io import BytesIO
-from microengine import Microengine
+from polyswarmclient.microengine import Microengine
 
 CLAMD_HOST = os.getenv('CLAMD_HOST', 'localhost')
 CLAMD_PORT = int(os.getenv('CLAMD_PORT', '3310'))
@@ -11,7 +11,7 @@ CLAMD_TIMEOUT = 30.0
 class ClamavMicroengine(Microengine):
     """Microengine which scans samples through clamd"""
 
-    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None):
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=False):
         """Initialize a ClamAV microengine
 
         Args:
@@ -20,7 +20,7 @@ class ClamavMicroengine(Microengine):
             password (str): Password to decrypt the encrypted private key
             api_key (str): API key to use with polyswarmd
         """
-        super().__init__(polyswarmd_addr, keyfile, password, api_key)
+        super().__init__(polyswarmd_addr, keyfile, password, api_key, testing)
         self.clamd = clamd.ClamdNetworkSocket(CLAMD_HOST, CLAMD_PORT, CLAMD_TIMEOUT)
 
     async def scan(self, guid, content):

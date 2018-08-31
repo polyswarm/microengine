@@ -8,7 +8,7 @@ from microengine.backend import choose_backend
 @click.option('--log', default='INFO',
         help='Logging level')
 @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='localhost:31337',
-        help='Address of polyswarmd instance')
+        help='Address (host:port) of polyswarmd instance')
 @click.option('--keyfile', envvar='MICROENGINE_KEYFILE', type=click.Path(exists=True), default='keyfile',
         help='Keystore file containing the private key to use with this microengine')
 @click.option('--password', envvar='MICROENGINE_PASSWORD', prompt=True, hide_input=True,
@@ -23,7 +23,7 @@ def main(log, polyswarmd_addr, keyfile, password, api_key, backend, testing):
     """Entrypoint for the microengine driver
 
     Args:
-        polyswarmd_addr (str): Address of polyswarmd
+        polyswarmd_uri(str): Address of polyswarmd
         keyfile (str): Path to private key file to use to sign transactions
         password (str): Password to decrypt the encrypted private key
         backend (str): Backend implementation to use
@@ -37,7 +37,8 @@ def main(log, polyswarmd_addr, keyfile, password, api_key, backend, testing):
     logging.basicConfig(level=loglevel, format='%(levelname)s:%(name)s:%(asctime)s %(message)s')
 
     micro_engine_class = choose_backend(backend)
-    micro_engine_class(polyswarmd_addr, keyfile, password, api_key).run(testing)
+    micro_engine_class(polyswarmd_addr, keyfile, password, api_key, testing).run()
 
-if __name__ ==  '__main__':
+
+if __name__ == '__main__':
     main()
