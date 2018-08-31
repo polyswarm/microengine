@@ -20,7 +20,7 @@ def choose_backend(backend):
     """
     micro_engine_class = None
     if backend == 'scratch':
-        ScratchMicroengine(polyswarmd_addr, keyfile, password).run(testing)
+        # ScratchMicroengine(polyswarmd_addr, keyfile, password).run(testing)
         micro_engine_class = ScratchMicroengine
     elif backend == 'eicar':
         micro_engine_class = EicarMicroengine  # EicarMicroengine(polyswarmd_addr, keyfile, password).run(testing)
