@@ -493,6 +493,7 @@ async def check_payout(offer_message, msg):
     has_correct_ambassador_pay = offer_message.last_message['state']['ambassador_balance'] - offer_message.last_message['state']['offer_amount'] == msg['state']['ambassador_balance']
     has_correct_expert_pay = offer_message.last_message['state']['expert_balance'] + offer_message.last_message['state']['offer_amount'] == msg['state']['expert_balance']
     has_correct_nonce = offer_message.last_message['state']['nonce'] + 1 == msg['state']['nonce']
+    # TODO: needs to check that the correct ambassador address signed here
 
     return has_correct_ambassador_pay and has_correct_expert_pay and has_correct_nonce
 
@@ -593,6 +594,7 @@ async def listen_for_events(microengine, loop):
 
             if microengine.testing == 0:
                 logging.info('exiting test mode')
+
                 # This is delayed by a few seconds, presumably for event loop cleanup
                 sys.exit(0)
 
