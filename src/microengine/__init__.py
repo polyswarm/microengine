@@ -132,7 +132,7 @@ class OfferChannel(object):
         self.last_message = None
 
     def set_state(self, state):
-        # TODO: change to be a persistant database so all the assersions can be saved
+        # TODO: change to be a persistant database so all the assertions can be saved
         # cureent saving just the last state/signiture for disputes
 
         self.offer_amount = state['state']['offer_amount']
@@ -248,6 +248,8 @@ async def post_transactions(microengine, session, transactions):
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
+    params = {'account': microengine.address}
+
     signed = []
     for tx in transactions:
         s = web3.eth.account.signTransaction(tx, microengine.priv_key)
@@ -255,7 +257,7 @@ async def post_transactions(microengine, session, transactions):
         signed.append(raw)
 
     uri = 'http://{0}/transactions'.format(microengine.polyswarmd_addr)
-    async with session.post(uri, json={'transactions': signed}) as response:
+    async with session.post(uri, json={'transactions': signed}, params=params) as response:
         j = await response.json()
         if microengine.testing >= 0 and 'errors' in j.get('result', {}):
             logging.error('Received transaction error in testing mode: %s', j)
@@ -277,15 +279,16 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
+    params = {'account': microengine.address}
     uri = 'http://{0}/bounties/{1}/assertions'.format(
         microengine.polyswarmd_addr, guid)
     assertion = {
         'bid': str(bid),
-        'mask': mask,
+        'mask': mask,response
         'verdicts': verdicts,
     }
 
-    async with session.post(uri, json=assertion) as response:
+    async with session.post(uri, json=assertion, params=params) as response:
         response = await response.json()
 
     if not check_response(response):
@@ -320,6 +323,7 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
+    params = {'account': microengine.address}
     uri = 'http://{0}/bounties/{1}/assertions/{2}/reveal'.format(
         microengine.polyswarmd_addr, guid, index)
     reveal = {
@@ -328,7 +332,7 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
         'metadata': metadata,
     }
 
-    async with session.post(uri, json=reveal) as response:
+    async with session.post(uri, json=reveal, params=params) as response:
         response = await response.json()
 
     if not check_response(response):
@@ -357,9 +361,10 @@ async def settle_bounty(microengine, session, guid):
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
+    params = {'account': microengine.address}
     uri = 'http://{0}/bounties/{1}/settle'.format(microengine.polyswarmd_addr,
                                                   guid)
-    async with session.post(uri) as response:
+    async with session.post(uri, params=params) as response:
         response = await response.json()
 
     if not check_response(response):
@@ -448,7 +453,7 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     return assertions
 
 async def generate_state(session, microengine, **kwargs):
-    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/state', json=kwargs) as response:
+    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/state', json=kwargs, params=params) as response:
         return (await response.json())['result']['state']
 
 def sign_state(state, private_key):
@@ -463,12 +468,13 @@ def sign_state(state, private_key):
 
 async def join_offer(microengine, session, guid, sig):
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
+    params = {'account': microengine.address}
     uri = 'http://{0}/offers/{1}/join?account={2}'.format(
         microengine.polyswarmd_addr, guid, microengine.address)
     
     logging.debug('Microengine Header in Join %s', headers)
 
-    async with session.post(uri, json=sig) as response:
+    async with session.post(uri, json=sig, params=params) as response:
         response = await response.json()
 
     response = await post_transactions(microengine, session,
@@ -477,10 +483,11 @@ async def join_offer(microengine, session, guid, sig):
 
 async def challenge_settle(microengine, offer_channel, session, ws, guid):
     prev_state = offer_channel.last_message
+    params = {'account': microengine.address}
 
     sig = sign_state(prev_state['raw_state'], microengine.priv_key)
 
-    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/' + str(guid) + '/challenge?account=' + microengine.address, json=create_signiture_dict(sig, prev_state, prev_state['raw_state'])) as response:
+    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/' + str(guid) + '/challenge', params=params, json=create_signiture_dict(sig, prev_state, prev_state['raw_state']), ) as response:
         response = await response.json()
 
     transactions = response['result']['transactions']
@@ -540,7 +547,7 @@ async def dispute_channel(microengine, offer_channel, session, guid):
     prev_state = offer_channel.last_message
     sig = sign_state(prev_state['raw_state'], microengine.priv_key)
 
-    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/' + str(guid) + '/settle?account=' + microengine.address, json=create_signiture_dict(sig, prev_state, prev_state['raw_state'])) as response:
+    async with session.post('http://' + microengine.polyswarmd_addr + '/offers/' + str(guid) + '/settle', params=params, json=create_signiture_dict(sig, prev_state, prev_state['raw_state'])) as response:
         response = await response.json()
 
     transactions = response['result']['transactions']
@@ -557,7 +564,9 @@ async def listen_for_events(microengine, loop):
     """
     uri = 'ws://{0}/events'.format(microengine.polyswarmd_addr)
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
-    async with aiohttp.ClientSession(headers=headers) as session:
+    params = {'account': microengine.address} if microengine.address else {}
+
+    async with aiohttp.ClientSession(headers=headers, params=params) as session:
         async with websockets.connect(uri, extra_headers=headers) as ws:
             while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
