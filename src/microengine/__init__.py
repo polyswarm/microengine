@@ -566,7 +566,7 @@ async def listen_for_events(microengine, loop):
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
     params = {'account': microengine.address} if microengine.address else {}
 
-    async with aiohttp.ClientSession(headers=headers, params=params) as session:
+    async with aiohttp.ClientSession(headers=headers) as session:
         async with websockets.connect(uri, extra_headers=headers) as ws:
             while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
