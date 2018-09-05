@@ -284,7 +284,7 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
         microengine.polyswarmd_addr, guid)
     assertion = {
         'bid': str(bid),
-        'mask': mask,response
+        'mask': mask,
         'verdicts': verdicts,
     }
 
