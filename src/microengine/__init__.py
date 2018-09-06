@@ -304,7 +304,7 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     try:
         return nonce, response['result']['assertions']
     except:
-        logging.warning('expected assertion, got: %s', response)
+        logging.error('expected assertion, got: %s', response)
         return None, []
 
 
@@ -347,7 +347,7 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
     try:
         return response['result']['reveals']
     except:
-        logging.warning('expected reveal, got: %s', response)
+        logging.error('expected reveal, got: %s', response)
         return None
 
 
@@ -379,7 +379,7 @@ async def settle_bounty(microengine, session, guid):
     try:
         return response['result']['transfers']
     except:
-        logging.warning('expected transfer, got: %s', response)
+        logging.error('expected transfer, got: %s', response)
         return None
 
 
