@@ -368,7 +368,7 @@ async def settle_bounty(microengine, session, guid):
         response = await response.json()
 
     if not check_response(response):
-        return Nonce
+        return None
 
     response = await post_transactions(microengine, session,
                                        response['result']['transactions'])
