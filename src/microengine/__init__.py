@@ -201,7 +201,8 @@ def check_response(response):
     Returns:
         (bool): True if successful else False
     """
-    return response['status'] == 'OK'
+    status = response.get('status')
+    return status and status == 'OK'
 
 
 def is_valid_ipfs_hash(ipfs_hash):
