@@ -564,6 +564,11 @@ async def listen_for_events(microengine, loop):
     """
     # http:// -> ws://, https:// -> wss://
     uri = '{0}/events'.format(microengine.polyswarmd_addr).replace('http', 'ws', 1)
+
+    # if no protocol is specified, assume ws://
+    if not uri.startswith('ws'):
+	uri = 'ws://' + uri
+
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
     params = {'account': microengine.address} if microengine.address else {}
 
