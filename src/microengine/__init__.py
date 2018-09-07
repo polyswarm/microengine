@@ -259,12 +259,12 @@ async def post_transactions(microengine, session, transactions):
 
     uri = '{0}/transactions'.format(microengine.polyswarmd_addr)
     async with session.post(uri, json={'transactions': signed}, params=params) as response:
-        j = await response.json()
-        if microengine.testing >= 0 and 'errors' in j.get('result', {}):
-            logging.error('Received transaction error in testing mode: %s', j)
+        response = await response.json()
+        if microengine.testing >= 0 and 'errors' in response.get('result', {}):
+            logging.error('Received transaction error in testing mode: %s', response)
             sys.exit(1)
 
-        return j
+        return response
 
 
 async def post_assertion(microengine, session, guid, bid, mask, verdicts):
@@ -577,18 +577,17 @@ async def listen_for_events(microengine, loop):
         async with websockets.connect(uri, extra_headers=headers) as ws:
             while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
-                if event['event'] == 'initialized_channel':
-                    if event['data']['expert'] == microengine.address:
-                        offer_channel = OfferChannel(event['data']['guid'])
-                        task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
-                        task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
+                if event['event'] == 'initialized_channel' and event['data']['expert'] == microengine.address:
+                    offer_channel = OfferChannel(event['data']['guid'])
+                    task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
+                    task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
                 if event['event'] == 'block':
                     number = event['data']['number']
                     if number % 100 == 0:
                         logging.debug('Block %s', number)
 
-                    block_results = await handle_new_block(
-                        microengine, session, number)
+                    block_results = loop.create_task(handle_new_block(
+                        microengine, session, number))
                     if block_results:
                         logging.info('Block results: %s', block_results)
                 elif event['event'] == 'bounty':
@@ -604,8 +603,8 @@ async def listen_for_events(microengine, loop):
                     bounty = event['data']
                     logging.info('received bounty: %s', bounty)
 
-                    assertions = await handle_new_bounty(
-                        microengine, session, **bounty)
+                    assertions = loop.create_task(handle_new_bounty(
+                        microengine, session, **bounty))
                     logging.info('created assertions: %s', assertions)
 
             if microengine.testing == 0:
