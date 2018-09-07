@@ -598,8 +598,6 @@ async def listen_for_events(microengine, loop):
     if not uri.startswith('ws'):
         uri = 'ws://' + uri
 
-    logging.debug("BROKEN ws URI: %s" % uri)
-
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
     params = {'account': microengine.address} if microengine.address else {}
 
@@ -652,8 +650,6 @@ async def listen_for_offer_events(microengine, offer_channel, guid):
     # if no protocol is specified, assume ws://
     if not uri.startswith('ws'):
         uri = 'ws://' + uri
-
-    logging.debug("BROKEN ws URI: %s" % uri)
 
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
 
