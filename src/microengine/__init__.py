@@ -622,6 +622,8 @@ async def listen_for_offer_events(microengine, offer_channel, guid):
     if not uri.startswith('ws'):
         uri = 'ws://' + uri
 
+    logging.debug("BROKEN ws URI: %s" % uri)
+
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
 
     try:
