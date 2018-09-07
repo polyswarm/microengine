@@ -18,7 +18,7 @@ RULES_DIR = 'data/yara-rules/'
 class MultiMicroengine(Microengine):
     """Microengine which matches yara rules and scans samples through clamd"""
 
-    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=False):
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=False, insecure_transport=False):
         """Initialize a ClamAV/Yara microengine
 
         Args:
@@ -27,7 +27,7 @@ class MultiMicroengine(Microengine):
             password (str): Password to decrypt the encrypted private key
             api_key (str): API key to use with polyswarmd
         """
-        super().__init__(polyswarmd_addr, keyfile, password, api_key, testing)
+        super().__init__(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport=False)
         self.clamd = clamd.ClamdNetworkSocket(CLAMD_HOST, CLAMD_PORT,
                                               CLAMD_TIMEOUT)
         self.rules = yara.compile(RULES_DIR + "malware/MALW_Eicar")

@@ -11,7 +11,7 @@ CLAMD_TIMEOUT = 30.0
 class ClamavMicroengine(Microengine):
     """Microengine which scans samples through clamd"""
 
-    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=False):
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=False, insecure_transport=False):
         """Initialize a ClamAV microengine
 
         Args:
@@ -20,7 +20,7 @@ class ClamavMicroengine(Microengine):
             password (str): Password to decrypt the encrypted private key
             api_key (str): API key to use with polyswarmd
         """
-        super().__init__(polyswarmd_addr, keyfile, password, api_key, testing)
+        super().__init__(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport)
         self.clamd = clamd.ClamdNetworkSocket(CLAMD_HOST, CLAMD_PORT, CLAMD_TIMEOUT)
 
     async def scan(self, guid, content):
