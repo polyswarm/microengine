@@ -567,7 +567,7 @@ async def listen_for_events(microengine, loop):
 
     # if no protocol is specified, assume ws://
     if not uri.startswith('ws'):
-	uri = 'ws://' + uri
+        uri = 'ws://' + uri
 
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
     params = {'account': microengine.address} if microengine.address else {}
@@ -617,6 +617,11 @@ async def listen_for_events(microengine, loop):
 async def listen_for_offer_events(microengine, offer_channel, guid):
     # http:// -> ws://, https:// -> wss://
     uri = '{0}/events/{1}'.format(microengine.polyswarmd_addr.replace('http', 'ws', 1), guid)
+
+    # if no protocol is specified, assume ws://
+    if not uri.startswith('ws'):
+        uri = 'ws://' + uri
+
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
 
     try:
@@ -641,6 +646,11 @@ async def listen_for_offer_events(microengine, offer_channel, guid):
 
 async def listen_for_offer_messages(microengine, offer_channel, guid):
     uri = '{0}/messages/{1}'.format(microengine.polyswarmd_addr.replace('http', 'ws', 1), guid)
+
+    # if no protocol is specified, assume ws://
+    if not uri.startswith('ws'):
+        uri = 'ws://' + uri
+
     headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
 
     try:
