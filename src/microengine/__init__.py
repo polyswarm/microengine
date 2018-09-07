@@ -231,6 +231,11 @@ async def get_artifact(microengine, session, ipfs_hash, index):
 
     uri = '{0}/artifacts/{1}/{2}'.format(microengine.polyswarmd_addr,
                                                 ipfs_hash, index)
+
+    # if no protocol is specified, assume http://
+    if not uri.startswith('http'):
+        uri = 'http://' + uri
+
     async with session.get(uri) as response:
         if response.status == 200:
             return await response.read()
@@ -257,6 +262,11 @@ async def post_transactions(microengine, session, transactions):
         signed.append(raw)
 
     uri = '{0}/transactions'.format(microengine.polyswarmd_addr)
+
+    # if no protocol is specified, assume http://
+    if not uri.startswith('http'):
+        uri = 'http://' + uri
+
     async with session.post(uri, json={'transactions': signed}, params=params) as response:
         j = await response.json()
         if microengine.testing >= 0 and 'errors' in j.get('result', {}):
@@ -282,6 +292,11 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     params = {'account': microengine.address}
     uri = '{0}/bounties/{1}/assertions'.format(
         microengine.polyswarmd_addr, guid)
+
+    # if no protocol is specified, assume http://
+    if not uri.startswith('http'):
+        uri = 'http://' + uri
+
     assertion = {
         'bid': str(bid),
         'mask': mask,
@@ -326,6 +341,11 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
     params = {'account': microengine.address}
     uri = '{0}/bounties/{1}/assertions/{2}/reveal'.format(
         microengine.polyswarmd_addr, guid, index)
+
+    # if no protocol is specified, assume http://
+    if not uri.startswith('http'):
+        uri = 'http://' + uri
+
     reveal = {
         'nonce': nonce,
         'verdicts': verdicts,
@@ -364,6 +384,11 @@ async def settle_bounty(microengine, session, guid):
     params = {'account': microengine.address}
     uri = '{0}/bounties/{1}/settle'.format(microengine.polyswarmd_addr,
                                                   guid)
+
+    # if no protocol is specified, assume http://
+    if not uri.startswith('http'):
+        uri = 'http://' + uri
+
     async with session.post(uri, params=params) as response:
         response = await response.json()
 
@@ -471,6 +496,10 @@ async def join_offer(microengine, session, guid, sig):
     params = {'account': microengine.address}
     uri = '{0}/offers/{1}/join?account={2}'.format(
         microengine.polyswarmd_addr, guid, microengine.address)
+
+    # if no protocol is specified, assume http://
+    if not uri.startswith('http'):
+        uri = 'http://' + uri
     
     logging.debug('Microengine Header in Join %s', headers)
 
