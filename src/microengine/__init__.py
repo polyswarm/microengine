@@ -32,6 +32,9 @@ class Microengine(object):
         self.api_key = api_key
         self.testing = -1
 
+        self.base_nonce = 0
+        self.base_nonce_lock = asyncio.Lock()
+
         with open(keyfile, 'r') as f:
             self.priv_key = web3.eth.account.decrypt(f.read(), password)
 
@@ -117,7 +120,8 @@ class Microengine(object):
     def run(self, testing=-1):
         loop = asyncio.get_event_loop()
         try:
-            loop.run_until_complete(self.run_sockets(testing, loop))
+            loop.create_task(self.run_sockets(testing, loop))
+            loop.run_forever()
         finally:
             loop.close()
 
@@ -227,16 +231,43 @@ async def get_artifact(microengine, session, ipfs_hash, index):
     Returns:
         (bytes): Content of the artifact
     """
+    params = {'account': microengine.address}
     if not is_valid_ipfs_hash(ipfs_hash):
         return None
 
     uri = '{0}/artifacts/{1}/{2}'.format(microengine.polyswarmd_addr,
                                                 ipfs_hash, index)
-    async with session.get(uri) as response:
+    async with session.get(uri, params=params) as response:
         if response.status == 200:
             return await response.read()
 
         return None
+
+
+async def get_base_nonce(microengine, session):
+    """Get account's initial base nonce from polyswarmd
+
+    Args:
+        microengine (Microengine): The microengine instance
+        session (aiohttp.ClientSession): Client sesssion
+    Returns:
+        Response JSON parsed from polyswarmd containing nonce
+    """
+    params = {'account': microengine.address}
+    uri = '{0}/nonce'.format(microengine.polyswarmd_addr)
+
+    async with microengine.base_nonce_lock:
+        async with session.get(uri, params=params) as response:
+            response = await response.json()
+
+            if not check_response(response):
+                logging.error('Invalid nonce response, got %s', response)
+                return False
+
+            microengine.base_nonce = response['result']
+            logging.info('Got base nonce of: %s', microengine.base_nonce)
+            return True
+
 
 
 async def post_transactions(microengine, session, transactions):
@@ -259,12 +290,12 @@ async def post_transactions(microengine, session, transactions):
 
     uri = '{0}/transactions'.format(microengine.polyswarmd_addr)
     async with session.post(uri, json={'transactions': signed}, params=params) as response:
-        j = await response.json()
-        if microengine.testing >= 0 and 'errors' in j.get('result', {}):
-            logging.error('Received transaction error in testing mode: %s', j)
+        response = await response.json()
+        if microengine.testing >= 0 and 'errors' in response.get('result', {}):
+            logging.error('Received transaction error in testing mode: %s', response)
             sys.exit(1)
 
-        return j
+        return response
 
 
 async def post_assertion(microengine, session, guid, bid, mask, verdicts):
@@ -280,7 +311,6 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
-    params = {'account': microengine.address}
     uri = '{0}/bounties/{1}/assertions'.format(
         microengine.polyswarmd_addr, guid)
     assertion = {
@@ -289,15 +319,19 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
         'verdicts': verdicts,
     }
 
-    async with session.post(uri, json=assertion, params=params) as response:
-        response = await response.json()
+    async with microengine.base_nonce_lock:
+        params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
+        async with session.post(uri, json=assertion, params=params) as response:
+            response = await response.json()
 
-    if not check_response(response):
-        return None, []
+        if not check_response(response):
+            return None, []
 
-    nonce = response['result']['nonce']
-    response = await post_transactions(microengine, session,
-                                       response['result']['transactions'])
+        nonce = response['result']['nonce']
+        transactions = response['result']['transactions']
+        microengine.base_nonce += len(transactions)
+
+    response = await post_transactions(microengine, session, transactions)
 
     if not check_response(response):
         return None, []
@@ -324,7 +358,6 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
-    params = {'account': microengine.address}
     uri = '{0}/bounties/{1}/assertions/{2}/reveal'.format(
         microengine.polyswarmd_addr, guid, index)
     reveal = {
@@ -333,14 +366,18 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
         'metadata': metadata,
     }
 
-    async with session.post(uri, json=reveal, params=params) as response:
-        response = await response.json()
+    async with microengine.base_nonce_lock:
+        params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
+        async with session.post(uri, json=reveal, params=params) as response:
+            response = await response.json()
 
-    if not check_response(response):
-        return None
+        if not check_response(response):
+            return None
 
-    response = await post_transactions(microengine, session,
-                                       response['result']['transactions'])
+        transactions = response['result']['transactions']
+        microengine.base_nonce += len(transactions)
+
+    response = await post_transactions(microengine, session, transactions)
 
     if not check_response(response):
         return None
@@ -362,17 +399,20 @@ async def settle_bounty(microengine, session, guid):
     Returns:
         Response JSON parsed from polyswarmd containing emitted events
     """
-    params = {'account': microengine.address}
     uri = '{0}/bounties/{1}/settle'.format(microengine.polyswarmd_addr,
                                                   guid)
-    async with session.post(uri, params=params) as response:
-        response = await response.json()
+    async with microengine.base_nonce_lock:
+        params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
+        async with session.post(uri, params=params) as response:
+            response = await response.json()
 
-    if not check_response(response):
-        return None
+        if not check_response(response):
+            return None
 
-    response = await post_transactions(microengine, session,
-                                       response['result']['transactions'])
+        transactions = response['result']['transactions']
+        microengine.base_nonce += len(transactions)
+
+    response = await post_transactions(microengine, session, transactions)
 
     if not check_response(response):
         return None
@@ -391,21 +431,16 @@ async def handle_new_block(microengine, session, number):
         microengine (Microengine): The microengine instance
         session (aiohttp.ClientSession): Client sesssion
         number (int): The current block number reported from polyswarmd
-    Returns:
-        Response JSON parsed from polyswarmd containing emitted events
     """
-    ret = []
     while microengine.schedule_peek(
     ) and microengine.schedule_peek()[0] < number:
         exp, task = microengine.schedule_get()
         if isinstance(task, SecretAssertion):
-            ret.append(await
+            logging.info('Got reveals: %s', await
                        post_reveal(microengine, session, task.guid, task.index,
                                    task.nonce, task.verdicts, task.metadata))
         elif isinstance(task, UnsettledBounty):
-            ret.append(await settle_bounty(microengine, session, task.guid))
-
-    return ret
+            logging.info('Got settles: %s', await settle_bounty(microengine, session, task.guid))
 
 
 async def handle_new_bounty(microengine, session, guid, author, uri, amount,
@@ -420,8 +455,6 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
         uri (str): IPFS hash of the root artifact
         amount (str): Amount of the bounty in base NCT units (10 ^ -18)
         expiration (int): Block number of the bounty's expiration
-    Returns:
-        Response JSON parsed from polyswarmd containing placed assertions
     """
     mask = []
     verdicts = []
@@ -441,6 +474,7 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     nonce, assertions = await post_assertion(microengine, session, guid,
                                              microengine.bid(guid), mask,
                                              verdicts)
+    logging.info('Got nonce: %s, assertions: %s', nonce, assertions)
     for a in assertions:
         sa = SecretAssertion(guid, a['index'], nonce, verdicts,
                              ';'.join(metadatas))
@@ -454,6 +488,8 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     return assertions
 
 async def generate_state(session, microengine, **kwargs):
+    params = {'account': microengine.address}
+
     async with session.post(microengine.polyswarmd_addr + '/offers/state', json=kwargs, params=params) as response:
         return (await response.json())['result']['state']
 
@@ -467,35 +503,45 @@ def sign_state(state, private_key):
 
     return {'r':web3.toHex(sig.r), 'v':sig.v, 's':web3.toHex(sig.s), 'state': state}
 
+
 async def join_offer(microengine, session, guid, sig):
-    headers = {'Authorization': microengine.api_key} if microengine.api_key else {}
-    params = {'account': microengine.address}
-    uri = '{0}/offers/{1}/join?account={2}'.format(
-        microengine.polyswarmd_addr, guid, microengine.address)
-    
-    logging.debug('Microengine Header in Join %s', headers)
+    uri = '{0}/offers/{1}/join'.format(microengine.polyswarmd_addr, guid)
 
-    async with session.post(uri, json=sig, params=params) as response:
-        response = await response.json()
+    async with microengine.base_nonce_lock:
+        params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
+        async with session.post(uri, json=sig, params=params) as response:
+            response = await response.json()
 
-    response = await post_transactions(microengine, session,
-                                       response['result']['transactions'])
+        if not check_response(response):
+            return {}
+
+        transactions = response['result']['transactions']
+        microengine.base_nonce += len(transactions)
+
+    return await post_transactions(microengine, session, transactions)
 
 
 async def challenge_settle(microengine, offer_channel, session, ws, guid):
+    uri = '{0}/offers/{1}/challenge'.format(microengine.polyswarmd_addr, str(guid))
+
     prev_state = offer_channel.last_message
-    params = {'account': microengine.address}
-
     sig = sign_state(prev_state['raw_state'], microengine.priv_key)
+    challenge = create_signiture_dict(sig, prev_state, prev_state['raw_state'])
 
-    async with session.post(microengine.polyswarmd_addr + '/offers/' + str(guid) + '/challenge', params=params, json=create_signiture_dict(sig, prev_state, prev_state['raw_state']), ) as response:
+    async with microengine.base_nonce_lock:
+        params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
+        async with session.post(uri, json=challenge, params=params) as response:
+            response = await response.json()
+
         response = await response.json()
+        if not check_response(response):
+            return {}
 
-    transactions = response['result']['transactions']
+        transactions = response['result']['transactions']
+        microengine.base_nonce += len(transactions)
 
-    ret = await post_transactions(session, transactions)
+    return await post_transactions(microengine, session, transactions)
 
-    return ret
 
 async def check_payout(offer_message, msg):
     has_correct_ambassador_pay = offer_message.last_message['state']['ambassador_balance'] - offer_message.last_message['state']['offer_amount'] == msg['state']['ambassador_balance']
@@ -508,9 +554,9 @@ async def check_payout(offer_message, msg):
 async def accept_offer(microengine, session, ws, offer_message, guid):
     current_state = offer_message['state']
     uri = offer_message['artifact']
-
     mask = []
     verdicts = []
+
     for i in range(256):
         content = await get_artifact(microengine, session, uri, i)
         if not content:
@@ -545,17 +591,26 @@ async def accept_offer(microengine, session, ws, offer_message, guid):
     await ws.send(json.dumps(sig))
 
 async def dispute_channel(microengine, offer_channel, session, guid):
+    uri = '{0}/offers/{1}/settle'.format(microengine.polyswarmd_addr, str(guid))
+
     prev_state = offer_channel.last_message
     sig = sign_state(prev_state['raw_state'], microengine.priv_key)
+    challenge = create_signiture_dict(sig, prev_state, prev_state['raw_state'])
 
-    async with session.post(microengine.polyswarmd_addr + '/offers/' + str(guid) + '/settle', params=params, json=create_signiture_dict(sig, prev_state, prev_state['raw_state'])) as response:
+    async with microengine.base_nonce_lock:
+        params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
+        async with session.post(uri, json=challenge, params=params) as response:
+            response = await response.json()
+
         response = await response.json()
+        if not check_response(response):
+            return {}
 
-    transactions = response['result']['transactions']
+        transactions = response['result']['transactions']
+        microengine.base_nonce += len(transactions)
 
-    ret = await post_transactions(session, transactions)
+    return await post_transactions(microengine, session, transactions)
 
-    return ret
 
 async def listen_for_events(microengine, loop):
     """Listen for events via websocket connection to polyswarmd
@@ -574,23 +629,23 @@ async def listen_for_events(microengine, loop):
     params = {'account': microengine.address} if microengine.address else {}
 
     async with aiohttp.ClientSession(headers=headers) as session:
+        if not await get_base_nonce(microengine, session):
+            logging.error('error retrieving nonce')
+            sys.exit(1)
+
         async with websockets.connect(uri, extra_headers=headers) as ws:
             while microengine.testing != 0 or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
-                if event['event'] == 'initialized_channel':
-                    if event['data']['expert'] == microengine.address:
-                        offer_channel = OfferChannel(event['data']['guid'])
-                        task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
-                        task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
+                if event['event'] == 'initialized_channel' and event['data']['expert'] == microengine.address:
+                    offer_channel = OfferChannel(event['data']['guid'])
+                    task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
+                    task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
                 if event['event'] == 'block':
                     number = event['data']['number']
                     if number % 100 == 0:
                         logging.debug('Block %s', number)
 
-                    block_results = await handle_new_block(
-                        microengine, session, number)
-                    if block_results:
-                        logging.info('Block results: %s', block_results)
+                    loop.create_task(handle_new_block(microengine, session, number))
                 elif event['event'] == 'bounty':
                     if microengine.testing == 0:
                         logging.info(
@@ -604,15 +659,11 @@ async def listen_for_events(microengine, loop):
                     bounty = event['data']
                     logging.info('received bounty: %s', bounty)
 
-                    assertions = await handle_new_bounty(
-                        microengine, session, **bounty)
-                    logging.info('created assertions: %s', assertions)
+                    loop.create_task(handle_new_bounty(microengine, session, **bounty))
 
             if microengine.testing == 0:
                 logging.info('exiting test mode')
-
-                # This is delayed by a few seconds, presumably for event loop cleanup
-                sys.exit(0)
+                loop.stop()
 
 
 async def listen_for_offer_events(microengine, offer_channel, guid):
