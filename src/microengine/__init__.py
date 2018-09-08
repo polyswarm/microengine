@@ -231,12 +231,13 @@ async def get_artifact(microengine, session, ipfs_hash, index):
     Returns:
         (bytes): Content of the artifact
     """
+    params = {'account': microengine.address}
     if not is_valid_ipfs_hash(ipfs_hash):
         return None
 
     uri = '{0}/artifacts/{1}/{2}'.format(microengine.polyswarmd_addr,
                                                 ipfs_hash, index)
-    async with session.get(uri) as response:
+    async with session.get(uri, params=params) as response:
         if response.status == 200:
             return await response.read()
 
@@ -487,6 +488,8 @@ async def handle_new_bounty(microengine, session, guid, author, uri, amount,
     return assertions
 
 async def generate_state(session, microengine, **kwargs):
+    params = {'account': microengine.address}
+
     async with session.post(microengine.polyswarmd_addr + '/offers/state', json=kwargs, params=params) as response:
         return (await response.json())['result']['state']
 
@@ -551,9 +554,9 @@ async def check_payout(offer_message, msg):
 async def accept_offer(microengine, session, ws, offer_message, guid):
     current_state = offer_message['state']
     uri = offer_message['artifact']
-
     mask = []
     verdicts = []
+
     for i in range(256):
         content = await get_artifact(microengine, session, uri, i)
         if not content:
