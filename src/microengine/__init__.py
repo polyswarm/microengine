@@ -30,8 +30,6 @@ class Microengine(object):
         """
         self.polyswarmd_addr = polyswarmd_addr
         self.api_key = api_key
-        self.testing = -1
-
         self.base_nonce = 0
         self.base_nonce_lock = asyncio.Lock()
 
@@ -111,7 +109,7 @@ class Microengine(object):
         Args:
             testing (int): Mode to process N bounties then exit (optional)
         """
-        self.testing = testing
+        self.testing = { 'bounties': testing, 'offers': testing }
 
         tasks = [asyncio.ensure_future(listen_for_events(self, loop))]
 
@@ -291,7 +289,7 @@ async def post_transactions(microengine, session, transactions):
     uri = '{0}/transactions'.format(microengine.polyswarmd_addr)
     async with session.post(uri, json={'transactions': signed}, params=params) as response:
         response = await response.json()
-        if microengine.testing >= 0 and 'errors' in response.get('result', {}):
+        if (microengine.testing['bounties'] >= 0 or microengine.testing['offers'] >= 0) and 'errors' in response.get('result', {}):
             logging.error('Received transaction error in testing mode: %s', response)
             sys.exit(1)
 
@@ -634,12 +632,13 @@ async def listen_for_events(microengine, loop):
             sys.exit(1)
 
         async with websockets.connect(uri, extra_headers=headers) as ws:
-            while microengine.testing != 0 or not microengine.schedule_empty():
+            while (microengine.testing['bounties'] != 0 and microengine.testing['offers'] != 0) or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
+
                 if event['event'] == 'initialized_channel' and event['data']['expert'] == microengine.address:
                     offer_channel = OfferChannel(event['data']['guid'])
-                    task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
-                    task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
+                    loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
+                    loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
                 if event['event'] == 'block':
                     number = event['data']['number']
                     if number % 100 == 0:
@@ -647,13 +646,13 @@ async def listen_for_events(microengine, loop):
 
                     loop.create_task(handle_new_block(microengine, session, number))
                 elif event['event'] == 'bounty':
-                    if microengine.testing == 0:
+                    if microengine.testing['bounties'] == 0:
                         logging.info(
                             'bounty received but 0 bounties remaining in test mode, ignoring'
                         )
                         continue
-                    elif microengine.testing > 0:
-                        microengine.testing = microengine.testing - 1
+                    elif microengine.testing['bounties'] > 0:
+                        microengine.testing['bounties'] = microengine.testing['bounties'] - 1
                         logging.info('%s bounties remaining in test mode', microengine.testing)
 
                     bounty = event['data']
@@ -661,7 +660,7 @@ async def listen_for_events(microengine, loop):
 
                     loop.create_task(handle_new_bounty(microengine, session, **bounty))
 
-            if microengine.testing == 0:
+            if microengine.testing['bounties'] == 0 and microengine.testing['offers'] == 0:
                 logging.info('exiting test mode')
                 loop.stop()
 
@@ -719,6 +718,8 @@ async def listen_for_offer_messages(microengine, offer_channel, guid):
                     elif msg['type'] == 'offer':
                         offer_channel.set_state(msg)
                         await accept_offer(microengine, session, ws, msg, guid)
+                        if microengine.testing['offers'] > 0:
+                            microengine.testing['offers'] = microengine.testing['offers'] - 1
                     elif msg['type'] == 'payout':
                         pay_okay = await check_payout(offer_channel, msg)
 
@@ -726,7 +727,6 @@ async def listen_for_offer_messages(microengine, offer_channel, guid):
                             offer_channel.set_state(msg)
                         else:
                             await dispute_channel(microengine, offer_channel, session, guid)
-
                     elif msg['type'] == 'close':
                         sig = sign_state(msg['raw_state'], microengine.priv_key)
                         sig['type'] = 'close'

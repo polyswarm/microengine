@@ -18,7 +18,7 @@ from microengine.backend import choose_backend
 @click.option('--backend', envvar='MICROENGINE_BACKEND', default='scratch',
         help='Backend to use')
 @click.option('--testing', default=-1,
-        help='Activate testing mode for integration testing, respond to N bounties then exit')
+        help='Activate testing mode for integration testing, respond to N bounties and N offers then exit')
 def main(log, polyswarmd_addr, keyfile, password, api_key, backend, testing):
     """Entrypoint for the microengine driver
 
