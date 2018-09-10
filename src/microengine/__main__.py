@@ -5,7 +5,7 @@ from microengine.backend import choose_backend
 
 
 @click.command()
-@click.option('--log', default='DEBUG',
+@click.option('--log', default='INFO',
         help='Logging level')
 @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='localhost:31337',
         help='Address of polyswarmd instance')
