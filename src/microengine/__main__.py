@@ -34,7 +34,7 @@ def main(log, polyswarmd_addr, keyfile, password, api_key, backend, testing):
     if not isinstance(loglevel, int):
         logging.error('invalid log level')
         sys.exit(-1)
-    logging.basicConfig(level=loglevel)
+    logging.basicConfig(level=loglevel, format='%(levelname)s:%(name)s:%(asctime)s %(message)s')
 
     micro_engine_class = choose_backend(backend)
     micro_engine_class(polyswarmd_addr, keyfile, password, api_key).run(testing)
