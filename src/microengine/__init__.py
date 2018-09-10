@@ -9,6 +9,7 @@ import websockets
 from eth_account.messages import defunct_hash_message
 from queue import PriorityQueue
 from web3.auto import w3 as web3
+from pprint import pprint, pformat
 
 # These values come from the BountyRegistry contract
 MINIMUM_BID = 62500000000000000
@@ -107,7 +108,7 @@ class Microengine(object):
         """Run this microengine
 
         Args:
-            testing (int): Mode to process N bounties then exit (optional)
+            testing (int): Mode to process N bounties and offers then exit (optional)
         """
         self.testing = { 'bounties': testing, 'offers': testing }
 
@@ -132,6 +133,8 @@ class OfferChannel(object):
         self.expert_balance = expert_balance
         self.nonce = 0
         self.last_message = None
+        self.event_socket = None
+        self.msg_socket = None
 
     def set_state(self, state):
         # TODO: change to be a persistant database so all the assertions can be saved
@@ -141,6 +144,13 @@ class OfferChannel(object):
         self.ambassador_balance = state['state']['ambassador_balance']
         self.expert_balance = state['state']['expert_balance']
         self.last_message = state
+
+    async def close_sockets(self):
+        if self.event_socket:
+            await self.event_socket.close()
+
+        if self.msg_socket:
+            await self.msg_socket.close()
 
     def __eq__(self, other):
         return self.guid == other.guid
@@ -521,7 +531,7 @@ async def join_offer(microengine, session, guid, sig):
     return await post_transactions(microengine, session, transactions)
 
 
-async def challenge_settle(microengine, offer_channel, session, ws, guid):
+async def challenge_settle(microengine, offer_channel, session, guid):
     uri = '{0}/offers/{1}/challenge'.format(microengine.polyswarmd_addr, str(guid))
 
     prev_state = offer_channel.last_message
@@ -573,9 +583,9 @@ async def accept_offer(microengine, session, ws, offer_message, guid):
         bit, verdict, metadata = await microengine.scan(guid, content)
 
         verdicts.append(verdict)
+
         mask.append(bit)
-
-
+    
     raw_state = await generate_state(session, microengine, close_flag=0,
         nonce=current_state['nonce'] + 1,
         ambassador=current_state['ambassador'],
@@ -589,7 +599,6 @@ async def accept_offer(microengine, session, ws, offer_message, guid):
         verdicts=verdicts)
 
     sig = sign_state(raw_state, microengine.priv_key)
-
     sig['type'] = 'accept'
     sig['artifact'] = offer_message['artifact']
 
@@ -614,7 +623,8 @@ async def dispute_channel(microengine, offer_channel, session, guid):
 
     res = await post_transactions(microengine, session, transactions)
 
-    logging.info(res)
+    logging.info('Sent Channel Dispute \n%s', pformat(offer_channel.last_message['state']))
+
 
 
 def create_signiture_dict(ambassador_sig, expert_sig, state):
@@ -640,11 +650,6 @@ async def close_disputed_channel(microengine, offer_channel, session, guid):
     microengine.base_nonce += len(transactions)
 
     ret = await post_transactions(microengine, session, transactions)
-
-    logging.info(ret)
-    logging.info(ret)
-    logging.info(ret)
-    logging.info(ret)
 
     return ret
 
@@ -672,18 +677,17 @@ async def listen_for_events(microengine, loop):
         async with websockets.connect(uri, extra_headers=headers) as ws:
             while (microengine.testing['bounties'] != 0 and microengine.testing['offers'] != 0) or not microengine.schedule_empty():
                 event = json.loads(await ws.recv())
-
                 if event['event'] == 'initialized_channel' and event['data']['expert'] == microengine.address:
                     guid = event['data']['guid']
                     offer_channel = OfferChannel(guid)
-
-                    task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, guid))
-                    task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, guid))
+                    logging.info('Offer Channel Initialized \n%s', pformat(event['data']))
+                    loop.create_task(listen_for_offer_messages(microengine, offer_channel, loop, guid))
+                    loop.create_task(listen_for_offer_events(microengine, offer_channel, loop, guid))
 
                 if event['event'] == 'block':
                     number = event['data']['number']
                     if number % 100 == 0:
-                        logging.debug('Block %s', number)
+                        logging.info('Block %s', number)
 
                     loop.create_task(handle_new_block(microengine, session, number))
                 elif event['event'] == 'bounty':
@@ -706,7 +710,7 @@ async def listen_for_events(microengine, loop):
                 loop.stop()
 
 
-async def listen_for_offer_events(microengine, offer_channel, guid):
+async def listen_for_offer_events(microengine, offer_channel, loop, guid):
     # http:// -> ws://, https:// -> wss://
     uri = '{0}/events/{1}'.format(microengine.polyswarmd_addr.replace('http', 'ws', 1), guid)
 
@@ -719,34 +723,41 @@ async def listen_for_offer_events(microengine, offer_channel, guid):
     try:
         async with aiohttp.ClientSession(headers=headers) as session:
             async with websockets.connect(uri, extra_headers=headers) as ws:
+                offer_channel.event_socket = ws;
                 while not ws.closed:
                     event = json.loads(await ws.recv())
                     if event['event'] == 'closed_agreement':
-                        ws.close()
+                        await offer_channel.close_sockets()
                     elif event['event'] == 'settle_started':
                         nonce = int(event['data']['nonce'])
                         settle_period_end = int(event['data']['settle_period_end'])
 
                         if nonce < offer_channel.nonce:
-                            await challenge_settle(microengine, offer_channel, session, ws, guid)
+                            await challenge_settle(microengine, offer_channel, session, guid)
                         else:
+                            logging.info('Settling Offer Channel Started \n%s', pformat(event['event']))
                             microengine.schedule_put(settle_period_end, offer_channel)
 
                     elif event['event'] == 'settle_challenged':
                         if nonce < offer_channel.nonce:
-                            await challenge_settle(microengine, offer_channel, session, ws, guid)
+                            await challenge_settle(microengine, offer_channel, session, guid)
                         else:
                             microengine.schedule_put(settle_period_end, offer_channel)
 
+                    if microengine.testing['bounties'] == 0 and microengine.testing['offers'] == 0:
+                        offer_channel.close_sockets()
+                        logging.info('exiting test mode')
+                        loop.stop()
     except Exception as e:
+        logging.error('ERROR IN OFFER EVENT SOCKET!')
+        logging.error(str(e))
         raise e
     else:
         pass
 
 
-async def listen_for_offer_messages(microengine, offer_channel, guid):
+async def listen_for_offer_messages(microengine, offer_channel, loop, guid):
     uri = '{0}/messages/{1}'.format(microengine.polyswarmd_addr.replace('http', 'ws', 1), guid)
-
     # if no protocol is specified, assume ws://
     if not uri.startswith('ws'):
         uri = 'ws://' + uri
@@ -756,43 +767,55 @@ async def listen_for_offer_messages(microengine, offer_channel, guid):
     try:
         async with aiohttp.ClientSession(headers=headers) as session:
             async with websockets.connect(uri, extra_headers=headers) as ws:
-                while not ws.closed:
-                    msg = json.loads(await ws.recv())
+                offer_channel.msg_socket = ws;
+                while not offer_channel.msg_socket.closed:
+                    msg = json.loads(await offer_channel.msg_socket.recv())
                     if 'type' in msg and msg['type'] == 'open':
                         sig = sign_state(msg['raw_state'], microengine.priv_key)
                         await join_offer(microengine, session, guid, sig)
+                        logging.info('Sending Offer Channel Join Message \n%s', pformat(msg['state']))
                         sig['type'] = 'join'
                         offer_channel.set_state(msg)
-                        await ws.send(json.dumps(sig))
+                        await offer_channel.msg_socket.send(json.dumps(sig))
                     elif msg['type'] == 'offer':
-
-                        if microengine.testing['offers'] > 0:
-                            microengine.testing['offers'] = microengine.testing['offers'] - 1
-
                         offer_okay = await check_offer(offer_channel, msg)
                         
                         if offer_okay:
+                            if microengine.testing['offers'] > 0:
+                                microengine.testing['offers'] = microengine.testing['offers'] - 1
+                                logging.info('Offers left: %s', microengine.testing['offers'])
+                            logging.info('Received Good Offer:\n%s', pformat(msg['state']))
                             offer_channel.set_state(msg)
-                            await accept_offer(microengine, session, ws, msg, guid)
+                            await accept_offer(microengine, session, offer_channel.msg_socket, msg, guid)
                         else:
+                            logging.info('Received Bad Offer - Will Dispute:\n%s', pformat(msg['state']))
+                            
                             await dispute_channel(microengine, offer_channel, session, guid)
 
                     elif msg['type'] == 'payout':
                         pay_okay = await check_payout(offer_channel, msg)
 
                         if pay_okay:
+                            logging.info('Received Good Pay:\n%s', pformat(msg['state']))
                             offer_channel.set_state(msg)
                         else:
+                            logging.info('Received Bad Pay - Will Dispute:\n%s', pformat(msg['state']))
                             await dispute_channel(microengine, offer_channel, session, guid)
+
                     elif msg['type'] == 'close':
                         sig = sign_state(msg['raw_state'], microengine.priv_key)
                         sig['type'] = 'close'
                         await ws.send(json.dumps(sig))
-                        ws.close()
-                        if microengine.testing['offers'] >= 0:
-                            sys.exit(0)
+                        await offer_channel.close_sockets()
+
+                    if microengine.testing['bounties'] == 0 and microengine.testing['offers'] == 0:
+                        offer_channel.close_sockets()
+                        logging.info('exiting test mode')
+                        loop.stop()
 
     except Exception as e:
+        logging.error('ERROR IN MESSAGE SOCKET!')
+        logging.error(str(e))
         raise e
     else:
         pass
