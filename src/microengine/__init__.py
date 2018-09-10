@@ -439,6 +439,8 @@ async def handle_new_block(microengine, session, number):
                                    task.nonce, task.verdicts, task.metadata))
         elif isinstance(task, UnsettledBounty):
             logging.info('Got settles: %s', await settle_bounty(microengine, session, task.guid))
+        elif isinstance(task, OfferChannel):
+            await close_disputed_channel(microengine, task, session, task.guid)
 
 
 async def handle_new_bounty(microengine, session, guid, author, uri, amount,
@@ -531,7 +533,6 @@ async def challenge_settle(microengine, offer_channel, session, ws, guid):
         async with session.post(uri, json=challenge, params=params) as response:
             response = await response.json()
 
-        response = await response.json()
         if not check_response(response):
             return {}
 
@@ -542,12 +543,18 @@ async def challenge_settle(microengine, offer_channel, session, ws, guid):
 
 
 async def check_payout(offer_message, msg):
-    has_correct_ambassador_pay = offer_message.last_message['state']['ambassador_balance'] - offer_message.last_message['state']['offer_amount'] == msg['state']['ambassador_balance']
-    has_correct_expert_pay = offer_message.last_message['state']['expert_balance'] + offer_message.last_message['state']['offer_amount'] == msg['state']['expert_balance']
+    has_correct_ambassador_balance = offer_message.last_message['state']['ambassador_balance'] - offer_message.last_message['state']['offer_amount'] == msg['state']['ambassador_balance']
+    has_correct_expert_balance = offer_message.last_message['state']['expert_balance'] + offer_message.last_message['state']['offer_amount'] == msg['state']['expert_balance']
     has_correct_nonce = offer_message.last_message['state']['nonce'] + 1 == msg['state']['nonce']
     # TODO: needs to check that the correct ambassador address signed here
 
-    return has_correct_ambassador_pay and has_correct_expert_pay and has_correct_nonce
+    return has_correct_ambassador_balance and has_correct_expert_balance and has_correct_nonce
+
+async def check_offer(offer_message, msg):
+    offer_message.last_message['state']['offer_amount'] == msg['state']['offer_amount']
+    # TODO: needs to check that the correct ambassador address signed here
+
+    return offer_message.last_message['state']['offer_amount'] == msg['state']['offer_amount']
 
 async def accept_offer(microengine, session, ws, offer_message, guid):
     current_state = offer_message['state']
@@ -593,22 +600,53 @@ async def dispute_channel(microengine, offer_channel, session, guid):
 
     prev_state = offer_channel.last_message
     sig = sign_state(prev_state['raw_state'], microengine.priv_key)
-    challenge = create_signiture_dict(sig, prev_state, prev_state['raw_state'])
 
     async with microengine.base_nonce_lock:
         params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
-        async with session.post(uri, json=challenge, params=params) as response:
+        async with session.post(uri, json=create_signiture_dict(offer_channel.last_message, sig, offer_channel.last_message['raw_state']), params=params) as response:
             response = await response.json()
 
-        response = await response.json()
         if not check_response(response):
-            return {}
+            return None
 
         transactions = response['result']['transactions']
         microengine.base_nonce += len(transactions)
 
-    return await post_transactions(microengine, session, transactions)
+    res = await post_transactions(microengine, session, transactions)
 
+    logging.info(res)
+
+
+def create_signiture_dict(ambassador_sig, expert_sig, state):
+    ret = { 'v': [], 'r': [], 's': [], 'state':state }
+
+    ret['v'].append(int(ambassador_sig['v']))
+    ret['r'].append(ambassador_sig['r'])
+    ret['s'].append(ambassador_sig['s'])
+
+    ret['v'].append(int(expert_sig['v']))
+    ret['r'].append(expert_sig['r'])
+    ret['s'].append(expert_sig['s'])
+
+    return ret
+
+async def close_disputed_channel(microengine, offer_channel, session, guid):
+    sig = sign_state(offer_channel.last_message['raw_state'], microengine.priv_key)
+    params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
+    async with session.post(microengine.polyswarmd_addr + '/offers/' + str(offer_channel.guid) + '/closeChallenged', params=params, json=create_signiture_dict(offer_channel.last_message, sig, offer_channel.last_message['raw_state'])) as response:
+        response = await response.json()
+
+    transactions = response['result']['transactions']
+    microengine.base_nonce += len(transactions)
+
+    ret = await post_transactions(microengine, session, transactions)
+
+    logging.info(ret)
+    logging.info(ret)
+    logging.info(ret)
+    logging.info(ret)
+
+    return ret
 
 async def listen_for_events(microengine, loop):
     """Listen for events via websocket connection to polyswarmd
@@ -636,9 +674,12 @@ async def listen_for_events(microengine, loop):
                 event = json.loads(await ws.recv())
 
                 if event['event'] == 'initialized_channel' and event['data']['expert'] == microengine.address:
-                    offer_channel = OfferChannel(event['data']['guid'])
-                    loop.create_task(listen_for_offer_messages(microengine, offer_channel, event['data']['guid']))
-                    loop.create_task(listen_for_offer_events(microengine, offer_channel, event['data']['guid']))
+                    guid = event['data']['guid']
+                    offer_channel = OfferChannel(guid)
+
+                    task0 = loop.create_task(listen_for_offer_messages(microengine, offer_channel, guid))
+                    task1 = loop.create_task(listen_for_offer_events(microengine, offer_channel, guid))
+
                 if event['event'] == 'block':
                     number = event['data']['number']
                     if number % 100 == 0:
@@ -684,11 +725,19 @@ async def listen_for_offer_events(microengine, offer_channel, guid):
                         ws.close()
                     elif event['event'] == 'settle_started':
                         nonce = int(event['data']['nonce'])
+                        settle_period_end = int(event['data']['settle_period_end'])
+
                         if nonce < offer_channel.nonce:
                             await challenge_settle(microengine, offer_channel, session, ws, guid)
+                        else:
+                            microengine.schedule_put(settle_period_end, offer_channel)
+
                     elif event['event'] == 'settle_challenged':
                         if nonce < offer_channel.nonce:
                             await challenge_settle(microengine, offer_channel, session, ws, guid)
+                        else:
+                            microengine.schedule_put(settle_period_end, offer_channel)
+
     except Exception as e:
         raise e
     else:
@@ -716,10 +765,18 @@ async def listen_for_offer_messages(microengine, offer_channel, guid):
                         offer_channel.set_state(msg)
                         await ws.send(json.dumps(sig))
                     elif msg['type'] == 'offer':
-                        offer_channel.set_state(msg)
-                        await accept_offer(microengine, session, ws, msg, guid)
+
                         if microengine.testing['offers'] > 0:
                             microengine.testing['offers'] = microengine.testing['offers'] - 1
+
+                        offer_okay = await check_offer(offer_channel, msg)
+                        
+                        if offer_okay:
+                            offer_channel.set_state(msg)
+                            await accept_offer(microengine, session, ws, msg, guid)
+                        else:
+                            await dispute_channel(microengine, offer_channel, session, guid)
+
                     elif msg['type'] == 'payout':
                         pay_okay = await check_payout(offer_channel, msg)
 
@@ -732,6 +789,8 @@ async def listen_for_offer_messages(microengine, offer_channel, guid):
                         sig['type'] = 'close'
                         await ws.send(json.dumps(sig))
                         ws.close()
+                        if microengine.testing['offers'] >= 0:
+                            sys.exit(0)
 
     except Exception as e:
         raise e
