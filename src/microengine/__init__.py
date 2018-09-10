@@ -268,13 +268,15 @@ async def get_base_nonce(microengine, session):
         async with session.get(uri, params=params) as response:
             response = await response.json()
 
-            if not check_response(response):
-                logging.error('Invalid nonce response, got %s', response)
-                return False
+        logging.debug('Get nonce response: %s', response)
 
-            microengine.base_nonce = response['result']
-            logging.info('Got base nonce of: %s', microengine.base_nonce)
-            return True
+        if not check_response(response):
+            logging.error('Invalid nonce response, got %s', response)
+            return False
+
+        microengine.base_nonce = response['result']
+        logging.info('Got base nonce of: %s', microengine.base_nonce)
+        return True
 
 
 
@@ -299,11 +301,14 @@ async def post_transactions(microengine, session, transactions):
     uri = '{0}/transactions'.format(microengine.polyswarmd_addr)
     async with session.post(uri, json={'transactions': signed}, params=params) as response:
         response = await response.json()
-        if (microengine.testing['bounties'] >= 0 or microengine.testing['offers'] >= 0) and 'errors' in response.get('result', {}):
-            logging.error('Received transaction error in testing mode: %s', response)
-            sys.exit(1)
 
-        return response
+    logging.debug('Post transactions response: %s', response)
+
+    if (microengine.testing['bounties'] >= 0 or microengine.testing['offers'] >= 0) and 'errors' in response.get('result', {}):
+        logging.error('Received transaction error in testing mode: %s', response)
+        sys.exit(1)
+
+    return response
 
 
 async def post_assertion(microengine, session, guid, bid, mask, verdicts):
@@ -331,6 +336,8 @@ async def post_assertion(microengine, session, guid, bid, mask, verdicts):
         params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
         async with session.post(uri, json=assertion, params=params) as response:
             response = await response.json()
+
+        logging.debug('Post assertion response: %s', response)
 
         if not check_response(response):
             return None, []
@@ -379,6 +386,8 @@ async def post_reveal(microengine, session, guid, index, nonce, verdicts,
         async with session.post(uri, json=reveal, params=params) as response:
             response = await response.json()
 
+        logging.debug('Post reveal response: %s', response)
+
         if not check_response(response):
             return None
 
@@ -413,6 +422,8 @@ async def settle_bounty(microengine, session, guid):
         params = {'account': microengine.address, 'base_nonce': microengine.base_nonce}
         async with session.post(uri, params=params) as response:
             response = await response.json()
+
+        logging.debug('Post settle response: %s', response)
 
         if not check_response(response):
             return None
