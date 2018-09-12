@@ -54,8 +54,9 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
 ## COPY IN MICROENGINE FILES
 WORKDIR /usr/src/app
 COPY requirements.txt ./
-COPY . .
 RUN set -x && pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN  pip install .
 
 ## DONE
 CMD ["microengine"]
