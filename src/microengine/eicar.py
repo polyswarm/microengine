@@ -7,7 +7,7 @@ EICAR = base64.b64decode(b'WDVPIVAlQEFQWzRcUFpYNTQoUF4pN0NDKTd9JEVJQ0FSLVNUQU5EQ
 class EicarMicroengine(Microengine):
     """Microengine which tests for the EICAR test file"""
 
-    async def scan(self, guid, content):
+    async def scan(self, guid, content, chain):
         """Scan an artifact searching for the EICAR string
 
         Args:

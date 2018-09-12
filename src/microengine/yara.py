@@ -22,7 +22,7 @@ class YaraMicroengine(Microengine):
         super().__init__(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport)
         self.rules = yara.compile(RULES_DIR + "malware/MALW_Eicar")
 
-    async def scan(self, guid, content):
+    async def scan(self, guid, content, chain):
         """Scan an artifact with YARA
 
         Args:

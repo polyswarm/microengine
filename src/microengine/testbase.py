@@ -30,7 +30,7 @@ class CommonMicroEngineTests:
 
             async def run_t():
                 guid = str(uuid.uuid4())
-                cor = me.scan(guid, mal_content)
+                cor = me.scan(guid, mal_content, 'home')
 
                 bit, infected, infected_str = await cor
                 self.assertEqual(infected, t)

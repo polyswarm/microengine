@@ -23,7 +23,7 @@ class ClamavMicroengine(Microengine):
         super().__init__(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport)
         self.clamd = clamd.ClamdNetworkSocket(CLAMD_HOST, CLAMD_PORT, CLAMD_TIMEOUT)
 
-    async def scan(self, guid, content):
+    async def scan(self, guid, content, chain):
         """Scan an artifact with ClamAV
 
         Args:

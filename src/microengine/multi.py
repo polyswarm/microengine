@@ -32,7 +32,7 @@ class MultiMicroengine(Microengine):
                                               CLAMD_TIMEOUT)
         self.rules = yara.compile(RULES_DIR + "malware/MALW_Eicar")
 
-    async def scan(self, guid, content):
+    async def scan(self, guid, content, chain):
         """Scan an artifact with ClamAV + YARA
 
         Args:
