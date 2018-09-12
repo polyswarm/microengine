@@ -1,6 +1,8 @@
+import base64
+
 from polyswarmclient.microengine import Microengine
 
-EICAR = b'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
+EICAR = base64.b64decode(b'WDVPIVAlQEFQWzRcUFpYNTQoUF4pN0NDKTd9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNULUZJTEUhJEgrSCo=')
 
 class EicarMicroengine(Microengine):
     """Microengine which tests for the EICAR test file"""
