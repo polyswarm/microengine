@@ -51,13 +51,13 @@ def choose_backend(backend):
         help='Logging level')
 @click.option('--polyswarmd-addr', envvar='POLYSWARMD_ADDR', default='localhost:31337',
         help='Address (host:port) of polyswarmd instance')
-@click.option('--keyfile', envvar='MICROENGINE_KEYFILE', type=click.Path(exists=True), default='keyfile',
+@click.option('--keyfile', envvar='KEYFILE', type=click.Path(exists=True), default='keyfile',
         help='Keystore file containing the private key to use with this microengine')
-@click.option('--password', envvar='MICROENGINE_PASSWORD', prompt=True, hide_input=True,
+@click.option('--password', envvar='PASSWORD', prompt=True, hide_input=True,
         help='Password to decrypt the keyfile with')
 @click.option('--api-key', envvar='API_KEY', default='',
         help='API key to use with polyswarmd')
-@click.option('--backend', envvar='MICROENGINE_BACKEND', default='scratch',
+@click.option('--backend', envvar='BACKEND', default='scratch',
         help='Backend to use')
 @click.option('--testing', default=-1,
         help='Activate testing mode for integration testing, respond to N bounties and N offers then exit')
