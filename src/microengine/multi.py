@@ -18,7 +18,7 @@ RULES_DIR = 'data/yara-rules/'
 class MultiMicroengine(Microengine):
     """Microengine which matches yara rules and scans samples through clamd"""
 
-    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=False, insecure_transport=False):
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=0, insecure_transport=False):
         """Initialize a ClamAV/Yara microengine
 
         Args:
@@ -26,6 +26,8 @@ class MultiMicroengine(Microengine):
             keyfile (str): Path to private key file to use to sign transactions
             password (str): Password to decrypt the encrypted private key
             api_key (str): API key to use with polyswarmd
+            testing (int): How many test bounties to respond to
+            insecure_transport (bool): Connect to polyswarmd over an insecure transport
         """
         super().__init__(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport=False)
         self.clamd = clamd.ClamdNetworkSocket(CLAMD_HOST, CLAMD_PORT,

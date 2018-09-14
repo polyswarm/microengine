@@ -10,7 +10,7 @@ RULES_DIR = 'data/yara-rules/'
 class YaraMicroengine(Microengine):
     """Microengine which matches samples against yara rules"""
 
-    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=False, insecure_transport=False):
+    def __init__(self, polyswarmd_addr, keyfile, password, api_key=None, testing=0, insecure_transport=False):
         """Initialize a Yara microengine
 
         Args:
@@ -18,6 +18,8 @@ class YaraMicroengine(Microengine):
             keyfile (str): Path to private key file to use to sign transactions
             password (str): Password to decrypt the encrypted private key
             api_key (str): API key to use with polyswarmd
+            testing (int): How many test bounties to respond to
+            insecure_transport (bool): Connect to polyswarmd over an insecure transport
         """
         super().__init__(polyswarmd_addr, keyfile, password, api_key, testing, insecure_transport)
         self.rules = yara.compile(RULES_DIR + "malware/MALW_Eicar")
